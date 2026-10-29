@@ -6,7 +6,7 @@ services:
     container_name: empurrao
     restart: unless-stopped
     environment:
-      - PORT=3000
+      - PORT=3042
     ports:
-      # Porta do host : porta do container. Troque a da esquerda se a 3000 já estiver em uso.
-      - "3000:3000"
+      # Porta do host : porta do container. Troque a da esquerda se a 3042 já estiver em uso.
+      - "3042:3042"

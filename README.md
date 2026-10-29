@@ -97,12 +97,12 @@ O projeto tem um `Dockerfile` (build em duas etapas, imagem final só com o serv
 **Rodando com Docker direto:**
 
 ```bash
-docker compose up -d --build     # constrói a imagem e sobe em http://localhost:3000
+docker compose up -d --build     # constrói a imagem e sobe em http://localhost:3042
 docker compose logs -f           # acompanha os logs (entradas/saídas de jogadores)
 docker compose down              # derruba
 ```
 
-Para usar outra porta no host, troque a da esquerda em `ports` no `docker-compose.yml` (ex.: `"8080:3000"`).
+Para usar outra porta no host, troque a da esquerda em `ports` no `docker-compose.yml` (ex.: `"8080:3042"`).
 
 A imagem tem **healthcheck** (o Portainer mostra o container como *healthy*) e encerra limpo no `docker stop`.
 
@@ -126,7 +126,7 @@ A imagem tem **healthcheck** (o Portainer mostra o container como *healthy*) e e
        container_name: empurrao
        restart: unless-stopped
        ports:
-         - "3000:3000"
+         - "3042:3042"
    ```
 
    Se a máquina do Portainer for ARM (ex.: Raspberry Pi) e a sua for x86, construa com `docker buildx build --platform linux/arm64 ...`.
