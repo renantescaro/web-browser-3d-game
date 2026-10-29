@@ -10,3 +10,10 @@ services:
     ports:
       # Porta do host : porta do container. Troque a da esquerda se a 3042 já estiver em uso.
       - "3042:3042"
+    networks:
+      # Rede compartilhada com o cloudflared: o túnel aponta para http://empurrao:3042.
+      - apps-network
+
+networks:
+  apps-network:
+    external: true
