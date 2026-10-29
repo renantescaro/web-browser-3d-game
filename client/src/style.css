@@ -1,0 +1,218 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #8ec5e8;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  color: #1d2733;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#app canvas {
+  display: block;
+}
+
+/* ---------- Tela de entrada ---------- */
+.join-screen {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, #8ec5e8 0%, #c9e7d1 100%);
+  z-index: 10;
+}
+
+.join-screen[hidden] {
+  display: none;
+}
+
+.join-card {
+  width: min(380px, 92vw);
+  padding: 28px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.join-card h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.join-card .subtitle {
+  margin: -8px 0 4px;
+  color: #5b6672;
+  font-size: 14px;
+}
+
+.join-card label {
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.join-card input[type="text"] {
+  font: inherit;
+  font-weight: 400;
+  padding: 10px 12px;
+  border: 2px solid #d4dbe2;
+  border-radius: 10px;
+  outline: none;
+}
+
+.join-card input[type="text"]:focus {
+  border-color: #4895ef;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+
+.color-swatch {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 2px rgb(255 255 255 / 0.6);
+  transition: transform 0.1s;
+}
+
+.color-swatch:hover:not(:disabled) {
+  transform: scale(1.08);
+}
+
+.color-swatch[aria-pressed="true"] {
+  border-color: #1d2733;
+  transform: scale(1.1);
+}
+
+.color-swatch:disabled {
+  cursor: not-allowed;
+  opacity: 0.25;
+  background-image: linear-gradient(45deg, transparent 45%, #1d2733 45%, #1d2733 55%, transparent 55%);
+}
+
+.join-status {
+  margin: 0;
+  font-size: 13px;
+  color: #5b6672;
+}
+
+.join-error {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 14px;
+  color: #c1121f;
+  font-weight: 600;
+}
+
+.join-card button[type="submit"] {
+  font: inherit;
+  font-weight: 700;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: #1d2733;
+  color: #fff;
+  cursor: pointer;
+}
+
+.join-card button[type="submit"]:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* ---------- HUD ---------- */
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.hud-online {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.hud-help {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.35);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.hud-status {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #c1121f;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.hud-status[hidden] {
+  display: none;
+}
+
+.hud-hint {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.4);
+  color: #fff;
+  font-size: 14px;
+}
+
+.hud-hint[hidden] {
+  display: none;
+}
+
+/* ---------- Rótulo de nome ---------- */
+.name-label {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.5);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-bottom: 3px solid var(--player-color, #fff);
+  pointer-events: none;
+  user-select: none;
+}

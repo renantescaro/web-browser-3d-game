@@ -1,0 +1,14 @@
+{
+  "name": "@jogo/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./protocol": "./src/protocol.ts",
+    "./constants": "./src/constants.ts",
+    "./math": "./src/math.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

@@ -1,0 +1,12 @@
+# Stack do Empurrão (pode ser colada no Portainer em Stacks → Add stack).
+services:
+  empurrao:
+    build: .
+    image: empurrao:latest
+    container_name: empurrao
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+    ports:
+      # Porta do host : porta do container. Troque a da esquerda se a 3000 já estiver em uso.
+      - "3000:3000"
