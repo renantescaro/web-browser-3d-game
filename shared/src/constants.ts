@@ -71,3 +71,17 @@ export const CAMERA_FOLLOW = 14;
 /** Velocidade máxima plausível (m/s), já considerando knockback. */
 export const MAX_PLAUSIBLE_SPEED = 25;
 export const MAX_HEIGHT = 30;
+
+// --- Controles de toque (celular) ---
+/** Raio (px) que o analógico virtual percorre do centro até a borda. */
+export const TOUCH_STICK_RADIUS = 50;
+/** Acima desta inclinação do analógico (0–1) o personagem corre. */
+export const TOUCH_RUN_THRESHOLD = 0.9;
+/** Multiplicador do arrasto do dedo em relação ao movimento do mouse. */
+export const TOUCH_LOOK_SCALE = 1.6;
+
+// --- Música de fundo (gerada no cliente com Web Audio) ---
+/** Andamento da música, em batidas por minuto. */
+export const MUSIC_BPM = 100;
+/** Volume geral da música (0–1); baixo para não abafar o jogo. */
+export const MUSIC_VOLUME = 0.22;

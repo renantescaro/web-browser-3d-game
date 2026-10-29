@@ -58,6 +58,8 @@ Monorepo com npm workspaces: `shared/`, `server/`, `client/`, além de `e2e/` na
 - **Posições na rede e na malha são dos pés** (y = 0 no chão). O corpo do Rapier é uma cápsula centrada em `CAPSULE_CENTER_Y` acima dos pés.
 - A gravidade é manual no `LocalPlayer` (o mundo Rapier tem gravidade 0). O knockback é uma velocidade horizontal que decai (`KNOCKBACK_DAMPING`) somada ao input. O personagem gira para a direção do **movimento**, não da câmera, e só gira enquanto anda.
 - **Remotos:** buffer de estados com o horário convertido para o relógio local (estimativa de offset em `RemotePlayers.applySnapshot`), renderizados `INTERPOLATION_DELAY_MS` no passado; nunca teleportam. A animação de soco remota dispara na transição do `anim` para `"punch"`.
+- **Celular:** `isTouchDevice()` (`pointer: coarse`) decide o modo. No celular, `TouchControls` cria analógico (inclinar até a borda = correr), botões Pular/Bater e arrastar a tela para girar a câmera; o `Input` mescla essas intenções com as do teclado e não usa pointer lock. A `Hud` mostra a ajuda de toque ou a de teclado conforme o modo.
+- **Música:** `Music.ts` compõe e sintetiza um loop com Web Audio (sem arquivos de áudio). O `AudioContext` só é criado no primeiro gesto do usuário (já na tela de entrada); tecla M ou botão 🎵 da HUD liga/desliga (lembrado no `localStorage`) e a música pausa com a aba oculta.
 - `Character.ts` monta a pessoa com primitivas e faz todas as animações procedurais (parado, andar, correr, pulo, soco e atingido). Recursos do Three.js precisam de `dispose()` ao remover um personagem, incluindo o elemento DOM do rótulo.
 
 ### Testes E2E e API de debug
@@ -86,4 +88,4 @@ O pointer lock (câmera pelo mouse e soco por clique) não funciona no headless;
 
 ## Fora do escopo (por enquanto)
 
-Vida, dano, morte e placar; contas e persistência; modelos 3D externos e animações por esqueleto; mais de uma sala ou servidor; mobile/touch.
+Vida, dano, morte e placar; contas e persistência; modelos 3D externos e animações por esqueleto; mais de uma sala ou servidor.

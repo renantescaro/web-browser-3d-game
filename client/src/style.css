@@ -19,14 +19,17 @@ body {
 
 #app canvas {
   display: block;
+  /* No celular, arrastar a tela gira a câmera em vez de rolar/dar zoom. */
+  touch-action: none;
 }
 
 /* ---------- Tela de entrada ---------- */
 .join-screen {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  padding: 12px;
+  overflow-y: auto;
   background: linear-gradient(160deg, #8ec5e8 0%, #c9e7d1 100%);
   z-index: 10;
 }
@@ -36,6 +39,8 @@ body {
 }
 
 .join-card {
+  /* margin: auto centraliza sem cortar o topo quando a tela é mais baixa que o cartão. */
+  margin: auto;
   width: min(380px, 92vw);
   padding: 28px;
   border-radius: 16px;
@@ -138,6 +143,24 @@ body {
   cursor: wait;
 }
 
+/* Celular deitado: cartão mais compacto, cores numa linha só. */
+@media (max-height: 500px) {
+  .join-card {
+    width: min(520px, 92vw);
+    padding: 16px 20px;
+    gap: 10px;
+  }
+
+  .join-card h1 {
+    font-size: 22px;
+  }
+
+  .color-grid {
+    grid-template-columns: repeat(10, 1fr);
+    gap: 6px;
+  }
+}
+
 /* ---------- HUD ---------- */
 .hud {
   position: absolute;
@@ -146,10 +169,16 @@ body {
   z-index: 5;
 }
 
-.hud-online {
+.hud-top-right {
   position: absolute;
   top: 12px;
   right: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.hud-online {
   padding: 6px 12px;
   border-radius: 999px;
   background: rgb(0 0 0 / 0.45);
@@ -203,6 +232,79 @@ body {
   display: none;
 }
 
+/* No celular a ajuda fica no topo, longe do analógico e dos botões. */
+.hud-help-touch {
+  top: 12px;
+  bottom: auto;
+}
+
+/* ---------- Controles de toque ---------- */
+.touch-controls {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.touch-stick {
+  position: absolute;
+  left: calc(28px + env(safe-area-inset-left));
+  bottom: calc(28px + env(safe-area-inset-bottom));
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.25);
+  border: 2px solid rgb(255 255 255 / 0.5);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.8);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.3);
+}
+
+.touch-btn {
+  position: absolute;
+  border: 2px solid rgb(255 255 255 / 0.6);
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.35);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-btn:active {
+  background: rgb(255 255 255 / 0.35);
+}
+
+.touch-punch {
+  right: calc(28px + env(safe-area-inset-right));
+  bottom: calc(40px + env(safe-area-inset-bottom));
+  width: 84px;
+  height: 84px;
+}
+
+.touch-jump {
+  right: calc(124px + env(safe-area-inset-right));
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  width: 68px;
+  height: 68px;
+}
+
 /* ---------- Rótulo de nome ---------- */
 .name-label {
   padding: 2px 8px;
@@ -215,4 +317,20 @@ body {
   border-bottom: 3px solid var(--player-color, #fff);
   pointer-events: none;
   user-select: none;
+}
+
+.hud-music {
+  width: 34px;
+  height: 30px;
+  border: none;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.hud-music:hover {
+  background: rgb(0 0 0 / 0.6);
 }

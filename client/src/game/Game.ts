@@ -15,9 +15,11 @@ import { LocalPlayer } from "../entities/LocalPlayer";
 import type { Network } from "../net/Network";
 import { Hud } from "../ui/Hud";
 import { Input } from "./Input";
+import type { Music } from "./Music";
 import { Physics } from "./Physics";
 import { RemotePlayers } from "./RemotePlayers";
 import { ThirdPersonCamera } from "./ThirdPersonCamera";
+import { TouchControls, isTouchDevice } from "./TouchControls";
 import { World } from "./World";
 
 const FIXED_DT = 1 / PHYSICS_HZ;
@@ -63,6 +65,7 @@ export class Game {
     private readonly network: Network,
     welcome: WelcomeMessage,
     info: JoinMessage,
+    private readonly music: Music,
   ) {
     this.selfId = welcome.selfId;
     this.world = new World(container);
@@ -77,11 +80,16 @@ export class Game {
     this.remotes = new RemotePlayers(this.physics, this.world.scene, this.selfId);
     this.remotes.reset(welcome.players);
 
-    this.hud = new Hud(container);
+    const touchMode = isTouchDevice();
+    this.hud = new Hud(container, touchMode);
     this.hud.setOnline(welcome.players.length);
     this.hud.setConnected(true);
+    this.hud.setMusicMuted(music.muted);
+    this.hud.onMusicToggle = () => this.toggleMusic();
+    music.start();
 
-    this.input = new Input(this.world.renderer.domElement);
+    const canvas = this.world.renderer.domElement;
+    this.input = new Input(canvas, touchMode ? new TouchControls(container, canvas) : null);
     this.input.onPointerLockChange = (locked) => this.hud.setPointerLocked(locked);
 
     this.bindNetwork();
@@ -152,6 +160,7 @@ export class Game {
     this.camera.toWorldDirection(intents.moveX, intents.moveZ, this.moveDir);
     this.local.setInput(this.moveDir, intents.run, intents.jump);
     if (intents.punch && this.local.tryPunch(time)) this.network.punch();
+    if (intents.toggleMusic) this.toggleMusic();
 
     // 2) Remotos (interpolação + colliders) e física em passo fixo
     this.remotes.update(time, dt);
@@ -180,6 +189,10 @@ export class Game {
     }
   };
 
+  private toggleMusic(): void {
+    this.hud.setMusicMuted(this.music.toggleMuted());
+  }
+
   private exposeDebugApi(): void {
     window.__jogo = {
       selfId: () => this.selfId,
@@ -197,6 +210,7 @@ export class Game {
 
   dispose(): void {
     cancelAnimationFrame(this.frameId);
+    this.music.stop();
     this.unbindNetwork();
     this.input.dispose();
     this.remotes.clear();

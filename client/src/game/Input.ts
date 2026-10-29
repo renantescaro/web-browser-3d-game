@@ -1,4 +1,5 @@
-// Teclado/mouse → intenções. Não move nada: o loop de jogo consome as intenções.
+// Teclado/mouse (e toque, se houver) → intenções. Não move nada: o loop de jogo consome as intenções.
+import type { TouchControls } from "./TouchControls";
 
 export interface Intents {
   /** Eixo lateral: -1 (A) a 1 (D). */
@@ -8,6 +9,8 @@ export interface Intents {
   run: boolean;
   jump: boolean;
   punch: boolean;
+  /** Liga/desliga a música (tecla M). */
+  toggleMusic: boolean;
   lookDX: number;
   lookDY: number;
 }
@@ -16,12 +19,16 @@ export class Input {
   private readonly keys = new Set<string>();
   private jumpQueued = false;
   private punchQueued = false;
+  private musicQueued = false;
   private lookDX = 0;
   private lookDY = 0;
   /** Avisado quando o pointer lock muda (para a HUD). */
   onPointerLockChange: ((locked: boolean) => void) | null = null;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly touch: TouchControls | null = null,
+  ) {
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("keyup", this.onKeyUp);
     window.addEventListener("blur", this.onBlur);
@@ -43,11 +50,25 @@ export class Input {
       run: k.has("ShiftLeft") || k.has("ShiftRight"),
       jump: this.jumpQueued,
       punch: this.punchQueued,
+      toggleMusic: this.musicQueued,
       lookDX: this.lookDX,
       lookDY: this.lookDY,
     };
+    if (this.touch) {
+      const t = this.touch.consume();
+      if (intents.moveX === 0 && intents.moveZ === 0) {
+        intents.moveX = t.moveX;
+        intents.moveZ = t.moveZ;
+        intents.run ||= t.run;
+      }
+      intents.jump ||= t.jump;
+      intents.punch ||= t.punch;
+      intents.lookDX += t.lookDX;
+      intents.lookDY += t.lookDY;
+    }
     this.jumpQueued = false;
     this.punchQueued = false;
+    this.musicQueued = false;
     this.lookDX = 0;
     this.lookDY = 0;
     return intents;
@@ -60,6 +81,7 @@ export class Input {
       if (!e.repeat) this.jumpQueued = true;
     }
     if (e.code === "KeyF" && !e.repeat) this.punchQueued = true;
+    if (e.code === "KeyM" && !e.repeat) this.musicQueued = true;
     this.keys.add(e.code);
   };
 
@@ -69,10 +91,11 @@ export class Input {
 
   private readonly onBlur = (): void => {
     this.keys.clear();
+    this.touch?.reset();
   };
 
   private readonly onMouseDown = (e: MouseEvent): void => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || this.touch) return;
     if (this.pointerLocked) {
       this.punchQueued = true;
       return;
@@ -102,6 +125,7 @@ export class Input {
     this.canvas.removeEventListener("mousedown", this.onMouseDown);
     document.removeEventListener("mousemove", this.onMouseMove);
     document.removeEventListener("pointerlockchange", this.onLockChange);
+    this.touch?.dispose();
     if (this.pointerLocked) document.exitPointerLock();
   }
 }

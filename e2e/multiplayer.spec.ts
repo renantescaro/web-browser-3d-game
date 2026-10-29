@@ -180,3 +180,46 @@ test("soco empurra o outro jogador", async ({ browser }) => {
 
   await closeAll([ana, beto]);
 });
+
+test("no celular mostra controles de toque e o analógico move", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 915, height: 412 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+  await page.getByPlaceholder("Seu nome").fill("Cel");
+  await page.locator(".color-swatch").nth(0).tap();
+  await page.getByRole("button", { name: "Entrar" }).tap();
+  await page.waitForFunction(() => window.__jogo !== undefined);
+  await expect(page.getByTestId("touch-stick")).toBeVisible();
+  await expect(page.getByTestId("controls-help")).toContainText("Analógico");
+
+  // Arrasta o analógico para cima, até a borda (corre para frente).
+  const box = await page.getByTestId("touch-stick").boundingBox();
+  if (!box) throw new Error("analógico sem posição");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  const cdp = await context.newCDPSession(page);
+  const before = await page.evaluate(() => window.__jogo?.local());
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y, id: 1 }] });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y - 80, id: 1 }] });
+  await expect.poll(async () => (await page.evaluate(() => window.__jogo?.local()))?.anim).toBe("run");
+  await page.waitForTimeout(500);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  const after = await page.evaluate(() => window.__jogo?.local());
+  expect(after && before ? Math.hypot(after.x - before.x, after.z - before.z) : 0).toBeGreaterThan(0.5);
+
+  await page.getByTestId("touch-punch").tap();
+  await expect.poll(async () => (await page.evaluate(() => window.__jogo?.local()))?.anim).toBe("punch");
+
+  await context.close();
+});
+
+test("no computador mostra a ajuda de teclado e não os controles de toque", async ({ browser }) => {
+  const page = await joinAs(browser, "PC", 0);
+  await expect(page.getByTestId("controls-help")).toContainText("WASD");
+  await expect(page.locator(".touch-controls")).toHaveCount(0);
+  await closeAll([page]);
+});
