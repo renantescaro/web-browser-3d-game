@@ -22,6 +22,16 @@ export interface PlayerSnapshot {
 
 export type JoinRejectReason = "full" | "invalidName" | "colorTaken";
 
+export type AnimalType = "dog" | "cat" | "horse";
+
+export interface AnimalData {
+  id: string;
+  type: AnimalType;
+  color: string;
+  position: Vec3;
+  rotationY: number;
+}
+
 export type ReactionId = 0 | 1 | 2 | 3;
 
 export interface ReactionMessage {
@@ -53,6 +63,7 @@ export interface LobbyMessage {
 export interface WelcomeMessage {
   selfId: string;
   players: PlayerSnapshot[];
+  animals: AnimalData[];
 }
 
 export interface JoinRejectedMessage {
@@ -67,8 +78,15 @@ export interface PlayerLeftMessage {
   id: string;
 }
 
+export interface AnimalSnapshot {
+  id: string;
+  position: Vec3;
+  rotationY: number;
+}
+
 export interface SnapshotMessage {
   players: PlayerSnapshot[];
+  animals: AnimalSnapshot[];
   /** Horário do servidor (ms). */
   t: number;
 }

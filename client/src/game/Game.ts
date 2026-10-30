@@ -18,6 +18,7 @@ import { Hud } from "../ui/Hud";
 import { Input } from "./Input";
 import type { Music } from "./Music";
 import { Physics } from "./Physics";
+import { AnimalsManager } from "./AnimalsManager";
 import { RemotePlayers } from "./RemotePlayers";
 import { ThirdPersonCamera } from "./ThirdPersonCamera";
 import { TouchControls, isTouchDevice } from "./TouchControls";
@@ -54,6 +55,7 @@ export class Game {
   private readonly hud: Hud;
   private readonly local: LocalPlayer;
   private readonly remotes: RemotePlayers;
+  private readonly animalsManager: AnimalsManager;
   private readonly moveDir = new THREE.Vector3();
   private selfId: string;
   private frameId = 0;
@@ -80,6 +82,9 @@ export class Game {
 
     this.remotes = new RemotePlayers(this.physics, this.world.scene, this.selfId);
     this.remotes.reset(welcome.players);
+
+    this.animalsManager = new AnimalsManager(this.world.scene);
+    this.animalsManager.load(welcome.animals);
 
     const touchMode = isTouchDevice();
     this.hud = new Hud(container, touchMode);
@@ -141,7 +146,10 @@ export class Game {
 
   private readonly onPlayerJoined = ({ player }: PlayerJoinedMessage): void => this.remotes.add(player);
   private readonly onPlayerLeft = ({ id }: PlayerLeftMessage): void => this.remotes.remove(id);
-  private readonly onSnapshot = (msg: SnapshotMessage): void => this.remotes.applySnapshot(msg);
+  private readonly onSnapshot = (msg: SnapshotMessage): void => {
+    this.remotes.applySnapshot(msg);
+    this.animalsManager.applySnapshot(msg.animals);
+  };
   private readonly onLobby = (msg: LobbyMessage): void => this.hud.setOnline(msg.playerCount);
   private readonly onDisconnect = (): void => this.hud.setConnected(false);
 
@@ -178,8 +186,9 @@ export class Game {
       }
     }
 
-    // 2) Remotos (interpolação + colliders) e física em passo fixo
+    // 2) Remotos, animais e física em passo fixo
     this.remotes.update(time, dt);
+    this.animalsManager.update(dt);
     this.accumulator += dt;
     let steps = 0;
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
@@ -230,6 +239,7 @@ export class Game {
     this.unbindNetwork();
     this.input.dispose();
     this.remotes.clear();
+    this.animalsManager.dispose();
     this.local.dispose();
     this.physics.dispose();
     this.hud.dispose();

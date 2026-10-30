@@ -7,6 +7,7 @@ import { Server } from "socket.io";
 import { SERVER_PORT, TICK_RATE } from "@jogo/shared/constants";
 import type { ClientToServerEvents, ReactionId, ServerToClientEvents } from "@jogo/shared/protocol";
 import { Room } from "./Room.js";
+import { generateAnimals } from "./Animals.js";
 import { parseJoin, parseState, RateLimiter } from "./validation.js";
 
 const port = Number(process.env.PORT) || SERVER_PORT;
@@ -46,6 +47,8 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: { origin: true },
 });
 const room = new Room();
+const animals = generateAnimals();
+console.log(`[servidor] ${animals.length} animais gerados (${animals.filter(a => a.type === "dog").length} cão, ${animals.filter(a => a.type === "cat").length} gato, ${animals.filter(a => a.type === "horse").length} cavalo)`);
 
 function lobbyMessage() {
   return { takenColors: room.takenColors(), playerCount: room.playerCount };
@@ -70,7 +73,7 @@ io.on("connection", (socket) => {
       return;
     }
     socket.join("game");
-    socket.emit("welcome", { selfId: socket.id, players: room.snapshots() });
+    socket.emit("welcome", { selfId: socket.id, players: room.snapshots(), animals: animals.map(a => a.toData()) });
     socket.to("game").emit("playerJoined", { player: result.player });
     io.emit("lobby", lobbyMessage());
     console.log(`[sala] + ${result.player.name} entrou (${room.playerCount} na sala)`);
@@ -103,9 +106,15 @@ io.on("connection", (socket) => {
   });
 });
 
+const TICK_DT = 1 / TICK_RATE;
 setInterval(() => {
+  for (const agent of animals) agent.update(TICK_DT);
   if (room.playerCount === 0) return;
-  io.to("game").emit("snapshot", { players: room.snapshots(), t: Date.now() });
+  io.to("game").emit("snapshot", {
+    players: room.snapshots(),
+    animals: animals.map(a => a.snapshot()),
+    t: Date.now(),
+  });
 }, 1000 / TICK_RATE);
 
 httpServer.listen(port, () => {

@@ -86,6 +86,12 @@ export const MUSIC_BPM = 100;
 /** Volume geral da música (0–1); baixo para não abafar o jogo. */
 export const MUSIC_VOLUME = 0.22;
 
+// --- Animais ---
+/** Cores disponíveis para cachorro e gato (branco, preto, cinza, amarelo). */
+export const ANIMAL_COLORS_SMALL = ["#f0ede8", "#1a1a1a", "#7a7a7a", "#c8960c"] as const;
+/** Cores disponíveis para cavalos (marrom, preto). */
+export const ANIMAL_COLORS_HORSE = ["#7b4f2e", "#1a1a1a"] as const;
+
 // --- Reações ---
 /** Emojis disponíveis, indexados pelo ReactionId (0–3). */
 export const REACTIONS = ["😊", "😢", "😠", "💡"] as const;
