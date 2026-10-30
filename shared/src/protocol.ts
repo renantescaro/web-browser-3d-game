@@ -32,6 +32,21 @@ export interface AnimalData {
   rotationY: number;
 }
 
+/** Tipos de árvore. Para um tipo novo: adicione aqui e crie a classe em `client/src/entities/trees/`. */
+export const TREE_TYPES = ["oak", "pine"] as const;
+export type TreeType = (typeof TREE_TYPES)[number];
+
+/** Árvore estática do cenário, gerada pelo servidor ao iniciar. */
+export interface TreeData {
+  id: string;
+  type: TreeType;
+  /** Posição da base do tronco (y = 0). */
+  position: Vec3;
+  rotationY: number;
+  /** Escala uniforme, entre `TREE_MIN_SCALE` e `TREE_MAX_SCALE`. */
+  scale: number;
+}
+
 export type ReactionId = 0 | 1 | 2 | 3;
 
 export interface ReactionMessage {
@@ -64,6 +79,7 @@ export interface WelcomeMessage {
   selfId: string;
   players: PlayerSnapshot[];
   animals: AnimalData[];
+  trees: TreeData[];
 }
 
 export interface JoinRejectedMessage {

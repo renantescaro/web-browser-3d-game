@@ -73,6 +73,16 @@ export class Physics {
     return controller;
   }
 
+  /** Cilindro fixo apoiado no chão (ex.: tronco de árvore). */
+  createStaticCylinder(x: number, z: number, height: number, radius: number): RAPIER.Collider {
+    const desc = RAPIER.ColliderDesc.cylinder(height / 2, radius).setTranslation(x, height / 2, z);
+    return this.world.createCollider(desc);
+  }
+
+  removeCollider(collider: RAPIER.Collider): void {
+    this.world.removeCollider(collider, false);
+  }
+
   removeBody(body: RAPIER.RigidBody): void {
     this.world.removeRigidBody(body);
   }

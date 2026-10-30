@@ -92,6 +92,19 @@ export const ANIMAL_COLORS_SMALL = ["#f0ede8", "#1a1a1a", "#7a7a7a", "#c8960c"] 
 /** Cores disponíveis para cavalos (marrom, preto). */
 export const ANIMAL_COLORS_HORSE = ["#7b4f2e", "#1a1a1a"] as const;
 
+// --- Árvores ---
+/** Quantas árvores o servidor gera ao iniciar. */
+export const TREE_COUNT = 10;
+/** Faixa da escala aleatória de cada árvore (1 = tamanho base, ~5 m de altura). */
+export const TREE_MIN_SCALE = 0.8;
+export const TREE_MAX_SCALE = 1.6;
+/** Distância mínima entre árvores (m). */
+export const TREE_MIN_SPACING = 8;
+/** Raio livre no centro do mapa, onde os jogadores nascem (m). */
+export const TREE_SPAWN_CLEAR_RADIUS = 20;
+/** Distância mínima das bordas do mapa (m). */
+export const TREE_EDGE_MARGIN = 10;
+
 // --- Reações ---
 /** Emojis disponíveis, indexados pelo ReactionId (0–3). */
 export const REACTIONS = ["😊", "😢", "😠", "💡"] as const;

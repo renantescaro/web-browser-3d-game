@@ -1,6 +1,14 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { io, type Socket } from "socket.io-client";
-import { MAX_PLAYERS, PLAYER_COLORS, SERVER_PORT } from "@jogo/shared/constants";
+import {
+  MAX_PLAYERS,
+  PLAYER_COLORS,
+  SERVER_PORT,
+  TREE_COUNT,
+  TREE_MAX_SCALE,
+  TREE_MIN_SCALE,
+  WORLD_HALF,
+} from "@jogo/shared/constants";
 import type { ClientToServerEvents, LobbyMessage, ServerToClientEvents } from "@jogo/shared/protocol";
 
 type BotSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -65,6 +73,23 @@ test("entra com nome e cor e vê o mundo", async ({ browser }) => {
   await expect(page.locator(".name-label", { hasText: "Ana" })).toBeVisible();
   await expect(page.getByTestId("online-count")).toHaveText(`1/${MAX_PLAYERS} online`);
   await closeAll([page]);
+});
+
+test("todos veem as mesmas árvores, dentro do mapa e com tamanho limitado", async ({ browser }) => {
+  const ana = await joinAs(browser, "Ana", 0);
+  const beto = await joinAs(browser, "Beto", 1);
+  const treesOf = (page: Page) => page.evaluate(() => window.__jogo?.trees() ?? []);
+
+  const trees = await treesOf(ana);
+  expect(trees).toHaveLength(TREE_COUNT);
+  for (const t of trees) {
+    expect(Math.abs(t.x)).toBeLessThan(WORLD_HALF);
+    expect(Math.abs(t.z)).toBeLessThan(WORLD_HALF);
+    expect(t.scale).toBeGreaterThanOrEqual(TREE_MIN_SCALE);
+    expect(t.scale).toBeLessThanOrEqual(TREE_MAX_SCALE);
+  }
+  expect(await treesOf(beto)).toEqual(trees);
+  await closeAll([ana, beto]);
 });
 
 test("vê outro jogador se movendo", async ({ browser }) => {

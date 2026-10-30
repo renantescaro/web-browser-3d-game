@@ -22,6 +22,7 @@ import { AnimalsManager } from "./AnimalsManager";
 import { RemotePlayers } from "./RemotePlayers";
 import { ThirdPersonCamera } from "./ThirdPersonCamera";
 import { TouchControls, isTouchDevice } from "./TouchControls";
+import { TreesManager } from "./TreesManager";
 import { World } from "./World";
 
 const FIXED_DT = 1 / PHYSICS_HZ;
@@ -36,6 +37,7 @@ export interface DebugApi {
   remotes: () => { id: string; name: string; x: number; y: number; z: number }[];
   /** Gira a câmera para olhar um ponto (assim "W" anda até ele). */
   lookAt: (x: number, z: number) => void;
+  trees: () => { type: string; x: number; z: number; scale: number }[];
 }
 
 declare global {
@@ -56,6 +58,7 @@ export class Game {
   private readonly local: LocalPlayer;
   private readonly remotes: RemotePlayers;
   private readonly animalsManager: AnimalsManager;
+  private readonly treesManager: TreesManager;
   private readonly moveDir = new THREE.Vector3();
   private selfId: string;
   private frameId = 0;
@@ -85,6 +88,9 @@ export class Game {
 
     this.animalsManager = new AnimalsManager(this.world.scene);
     this.animalsManager.load(welcome.animals);
+
+    this.treesManager = new TreesManager(this.physics, this.world.scene);
+    this.treesManager.load(welcome.trees);
 
     const touchMode = isTouchDevice();
     this.hud = new Hud(container, touchMode);
@@ -136,6 +142,7 @@ export class Game {
     this.selfId = msg.selfId;
     this.remotes.setSelfId(msg.selfId);
     this.remotes.reset(msg.players);
+    this.treesManager.load(msg.trees);
     this.hud.setConnected(true);
     this.network.sendState(this.local.state());
   };
@@ -230,6 +237,7 @@ export class Game {
         const p = this.local.renderPosition;
         this.camera.yaw = Math.atan2(x - p.x, z - p.z);
       },
+      trees: () => this.treesManager.debugInfo(),
     };
   }
 
@@ -240,6 +248,7 @@ export class Game {
     this.input.dispose();
     this.remotes.clear();
     this.animalsManager.dispose();
+    this.treesManager.clear();
     this.local.dispose();
     this.physics.dispose();
     this.hud.dispose();

@@ -8,6 +8,7 @@ import { SERVER_PORT, TICK_RATE } from "@jogo/shared/constants";
 import type { ClientToServerEvents, ReactionId, ServerToClientEvents } from "@jogo/shared/protocol";
 import { Room } from "./Room.js";
 import { generateAnimals } from "./Animals.js";
+import { generateTrees } from "./Trees.js";
 import { parseJoin, parseState, RateLimiter } from "./validation.js";
 
 const port = Number(process.env.PORT) || SERVER_PORT;
@@ -48,6 +49,8 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 });
 const room = new Room();
 const animals = generateAnimals();
+const trees = generateTrees();
+console.log(`[servidor] ${trees.length} árvores geradas`);
 console.log(`[servidor] ${animals.length} animais gerados (${animals.filter(a => a.type === "dog").length} cão, ${animals.filter(a => a.type === "cat").length} gato, ${animals.filter(a => a.type === "horse").length} cavalo)`);
 
 function lobbyMessage() {
@@ -73,7 +76,7 @@ io.on("connection", (socket) => {
       return;
     }
     socket.join("game");
-    socket.emit("welcome", { selfId: socket.id, players: room.snapshots(), animals: animals.map(a => a.toData()) });
+    socket.emit("welcome", { selfId: socket.id, players: room.snapshots(), animals: animals.map(a => a.toData()), trees });
     socket.to("game").emit("playerJoined", { player: result.player });
     io.emit("lobby", lobbyMessage());
     console.log(`[sala] + ${result.player.name} entrou (${room.playerCount} na sala)`);
