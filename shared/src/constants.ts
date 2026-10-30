@@ -1,5 +1,6 @@
 // Constantes de gameplay e rede compartilhadas entre cliente e servidor.
 // 1 unidade = 1 metro.
+import type { CharacterAppearance } from "./protocol";
 
 // --- Sala / rede ---
 export const MAX_PLAYERS = 10;
@@ -175,3 +176,28 @@ export const FISHING_SPEED_MAX = 2.4;
 export const FISHING_ZONE_BASE = 0.3;
 export const FISHING_ZONE_SHRINK_PER_FISH = 0.015;
 export const FISHING_ZONE_MIN = 0.07;
+
+// --- Comerciante (preços e estoque de cada item ficam em `items.ts`) ---
+export const MERCHANT_NAME = "Seu Joaquim";
+/** Aparência do comerciante; mude à vontade (ver `CharacterAppearance`). */
+export const MERCHANT_APPEARANCE: CharacterAppearance = {
+  shirtColor: "#3d6b8c",
+  pantsColor: "#4a3b2c",
+  skinColor: "#c98f65",
+  hat: { style: "wide", color: "#d9b56b" },
+  apronColor: "#efe6d2",
+  mustacheColor: "#3b2a1e",
+};
+export const MERCHANT_SIGN_TEXT = "Comerciante";
+/** Distância (m) da borda da praça até onde o comerciante fica, do lado de fora. */
+export const MERCHANT_SQUARE_GAP = 2.5;
+/** Distância (m) do comerciante até o centro da mesa, à frente dele. */
+export const MERCHANT_TABLE_OFFSET = 0.9;
+/** Distância máxima (m) do jogador até o centro da mesa para negociar. */
+export const MERCHANT_TRADE_RANGE = 2.2;
+/** Abertura total (graus) do cone em que o jogador precisa estar olhando para a mesa. */
+export const MERCHANT_FACING_DEG = 100;
+/** Intervalo mínimo entre duas negociações, conferido no servidor (ms). */
+export const TRADE_COOLDOWN_MS = 150;
+/** Limite do dinheiro de um jogador (protege o `join` de valores absurdos). */
+export const MAX_MONEY = 999_999;

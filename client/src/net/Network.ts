@@ -1,6 +1,14 @@
 // Conexão Socket.IO tipada com o protocolo compartilhado.
 import { io, type Socket } from "socket.io-client";
-import type { ClientToServerEvents, JoinMessage, ReactionId, ServerToClientEvents, StateMessage } from "@jogo/shared/protocol";
+import type { ItemId } from "@jogo/shared/items";
+import type {
+  ClientToServerEvents,
+  JoinMessage,
+  ReactionId,
+  ServerToClientEvents,
+  StateMessage,
+  TradeAction,
+} from "@jogo/shared/protocol";
 
 export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -33,6 +41,16 @@ export class Network {
   /** Atualiza a contagem de peixes da sessão, reenviada no `join` ao reconectar. */
   rememberFishCaught(count: number): void {
     if (this.session) this.session = { ...this.session, fishCaught: count };
+  }
+
+  /** Atualiza o dinheiro da sessão, reenviado no `join` ao reconectar. */
+  rememberMoney(amount: number): void {
+    if (this.session) this.session = { ...this.session, money: amount };
+  }
+
+  /** Compra ou vende uma unidade com o comerciante; o servidor confere e responde. */
+  trade(item: ItemId, action: TradeAction): void {
+    if (this.socket.connected) this.socket.emit("trade", { item, action });
   }
 
   /** Avisa que acertou o minigame de pesca; o servidor confere e responde com `fishCount`. */

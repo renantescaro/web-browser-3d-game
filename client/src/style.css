@@ -179,6 +179,7 @@ body {
 }
 
 .hud-online,
+.hud-money,
 .hud-fish {
   padding: 6px 12px;
   border-radius: 999px;
@@ -506,4 +507,116 @@ body {
 
 .fishing-exit:hover {
   background: rgb(255 255 255 / 0.15);
+}
+
+/* ---------- Comerciante ---------- */
+.merchant-panel {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  width: min(440px, calc(100% - 24px));
+  padding: 12px 16px 14px;
+  border-radius: 14px;
+  background: rgb(0 0 0 / 0.6);
+  color: #fff;
+  text-align: center;
+  pointer-events: auto;
+}
+
+.merchant-panel[hidden] {
+  display: none;
+}
+
+.merchant-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.merchant-name {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.merchant-wallet {
+  margin: 6px 0 10px;
+  font-size: 14px;
+}
+
+.merchant-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.merchant-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.1);
+  font-size: 14px;
+  text-align: left;
+}
+
+.merchant-item-name {
+  font-weight: 600;
+}
+
+.merchant-item-stock {
+  opacity: 0.85;
+  font-size: 13px;
+}
+
+.merchant-buy,
+.merchant-sell {
+  padding: 5px 10px;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.merchant-buy {
+  background: #2a9d8f;
+}
+
+.merchant-sell {
+  background: #e76f51;
+}
+
+.merchant-buy:disabled,
+.merchant-sell:disabled {
+  background: rgb(255 255 255 / 0.2);
+  color: rgb(255 255 255 / 0.55);
+  cursor: default;
+}
+
+.merchant-exit {
+  margin-top: 10px;
+  padding: 5px 14px;
+  border: 1px solid rgb(255 255 255 / 0.6);
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.merchant-exit:hover {
+  background: rgb(255 255 255 / 0.15);
+}
+
+/* No celular a linha do item quebra: nome e estoque em cima, botões embaixo. */
+@media (max-width: 420px) {
+  .merchant-item {
+    grid-template-columns: 1fr auto;
+  }
 }

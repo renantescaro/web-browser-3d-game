@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { Model } from "../Model";
+import { createWoodTextTexture } from "../textTexture";
 
 const BOARD_WIDTH = 2.4;
 const BOARD_HEIGHT = 0.7;
@@ -23,7 +24,7 @@ export class Sign extends Model {
     }
     this.mesh(new THREE.BoxGeometry(BOARD_WIDTH, BOARD_HEIGHT, BOARD_DEPTH), wood).position.y = BOARD_Y;
 
-    const texture = this.track(this.createTextTexture(text));
+    const texture = this.track(createWoodTextTexture(text, TEXTURE_WIDTH, TEXTURE_HEIGHT));
     const face = new THREE.PlaneGeometry(BOARD_WIDTH - 0.1, BOARD_HEIGHT - 0.1);
     const faceMat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9 });
     const front = this.mesh(face, faceMat);
@@ -31,33 +32,5 @@ export class Sign extends Model {
     const back = this.mesh(face, faceMat);
     back.position.set(0, BOARD_Y, -BOARD_DEPTH / 2 - 0.002);
     back.rotation.y = Math.PI;
-  }
-
-  /** Desenha o texto num canvas e o usa como textura. */
-  private createTextTexture(text: string): THREE.CanvasTexture {
-    const canvas = document.createElement("canvas");
-    canvas.width = TEXTURE_WIDTH;
-    canvas.height = TEXTURE_HEIGHT;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.fillStyle = "#c89b62";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = "#5c3b1e";
-      ctx.lineWidth = 14;
-      ctx.strokeRect(7, 7, canvas.width - 14, canvas.height - 14);
-      ctx.fillStyle = "#3b2512";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      let size = 150;
-      do {
-        ctx.font = `bold ${size}px system-ui, sans-serif`;
-        size -= 6;
-      } while (ctx.measureText(text).width > canvas.width * 0.88 && size > 20);
-      ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 6);
-    }
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 4;
-    return texture;
   }
 }

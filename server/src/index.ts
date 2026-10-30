@@ -8,9 +8,10 @@ import { SERVER_PORT, SQUARE_RADIUS, SQUARE_TREE_CLEARANCE, TICK_RATE } from "@j
 import { FISH_EATING_ANIMALS, type ClientToServerEvents, type ReactionId, type ServerToClientEvents } from "@jogo/shared/protocol";
 import { Room } from "./Room.js";
 import { generateAnimals } from "./Animals.js";
+import { Merchant, MERCHANT_CLEAR_RADIUS } from "./Merchant.js";
 import { generateSquare } from "./Square.js";
 import { generateTrees } from "./Trees.js";
-import { parseFeedAnimal, parseJoin, parseState, RateLimiter } from "./validation.js";
+import { parseFeedAnimal, parseJoin, parseState, parseTrade, RateLimiter } from "./validation.js";
 
 const port = Number(process.env.PORT) || SERVER_PORT;
 const clientDist = normalize(join(dirname(fileURLToPath(import.meta.url)), "../../client/dist"));
@@ -52,8 +53,10 @@ const room = new Room();
 const animals = generateAnimals();
 // A praça é gerada antes das árvores para que elas não nasçam em cima dela.
 const square = generateSquare();
+const merchant = new Merchant(square);
 const trees = generateTrees([
   { x: square.position.x, z: square.position.z, radius: SQUARE_RADIUS + SQUARE_TREE_CLEARANCE },
+  { x: merchant.position.x, z: merchant.position.z, radius: MERCHANT_CLEAR_RADIUS },
 ]);
 console.log(
   `[servidor] praça gerada em (${square.position.x.toFixed(0)}, ${square.position.z.toFixed(0)}): ` +
@@ -73,6 +76,7 @@ io.on("connection", (socket) => {
   const reactionLimiter = new RateLimiter(6, 10);
   const fishLimiter = new RateLimiter(2, 3);
   const feedLimiter = new RateLimiter(3, 3);
+  const tradeLimiter = new RateLimiter(6, 6);
 
   socket.emit("lobby", lobbyMessage());
 
@@ -80,14 +84,14 @@ io.on("connection", (socket) => {
     if (room.has(socket.id) || !joinLimiter.allow()) return;
     const msg = parseJoin(raw);
     if (!msg) return;
-    const result = room.join(socket.id, msg.name, msg.color, msg.fishCaught);
+    const result = room.join(socket.id, msg.name, msg.color, msg.fishCaught, msg.money);
     if (!result.ok) {
       console.log(`[sala] entrada recusada: ${result.reason}`);
       socket.emit("joinRejected", { reason: result.reason });
       return;
     }
     socket.join("game");
-    socket.emit("welcome", { selfId: socket.id, players: room.snapshots(), animals: animals.map(a => a.toData()), trees, square });
+    socket.emit("welcome", { selfId: socket.id, players: room.snapshots(), animals: animals.map(a => a.toData()), trees, square, merchant: merchant.toData() });
     socket.to("game").emit("playerJoined", { player: result.player });
     io.emit("lobby", lobbyMessage());
     console.log(`[sala] + ${result.player.name} entrou (${room.playerCount} na sala)`);
@@ -128,6 +132,16 @@ io.on("connection", (socket) => {
     animal.followingId = socket.id;
     socket.emit("fishCount", { count });
     io.to("game").emit("animalFed", { animalId: animal.id, playerId: socket.id });
+  });
+
+  socket.on("trade", (raw: unknown) => {
+    if (!room.has(socket.id) || !tradeLimiter.allow()) return;
+    const msg = parseTrade(raw);
+    const result = msg && room.trade(socket.id, msg, merchant);
+    if (!result) return;
+    socket.emit("fishCount", { count: result.fishCaught });
+    socket.emit("money", { amount: result.money });
+    io.to("game").emit("merchantStock", { stock: merchant.stockSnapshot(), playerId: socket.id });
   });
 
   socket.on("disconnect", () => {

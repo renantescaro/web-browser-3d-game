@@ -1,7 +1,8 @@
-// HUD: contador "X/10 online", peixes pescados, ação atual, botão da música, ajuda de controles,
+// HUD: contador "X/10 online", peixes pescados, dinheiro, ação atual, botão da música, ajuda de controles,
 // aviso de conexão e dica do mouse.
 // No celular (touchMode) a ajuda descreve os controles de toque e não há dica do mouse.
 import { MAX_PLAYERS } from "@jogo/shared/constants";
+import { formatMoney } from "./MerchantPanel";
 
 export class Hud {
   private readonly root = document.createElement("div");
@@ -10,6 +11,7 @@ export class Hud {
   private readonly hint = document.createElement("div");
   private readonly musicButton = document.createElement("button");
   private readonly fishCount = document.createElement("div");
+  private readonly money = document.createElement("div");
   private readonly action = document.createElement("div");
   /** Clique no botão da música. */
   onMusicToggle: (() => void) | null = null;
@@ -40,6 +42,11 @@ export class Hud {
     this.fishCount.title = "Peixes pescados";
     this.setFishCount(0);
 
+    this.money.className = "hud-money";
+    this.money.dataset.testid = "money";
+    this.money.title = "Dinheiro";
+    this.setMoney(0);
+
     // No computador mostra o que a tecla de Ação faz agora; no celular o próprio botão muda.
     this.action.className = "hud-action";
     this.action.dataset.testid = "action-label";
@@ -53,13 +60,13 @@ export class Hud {
     help.className = touchMode ? "hud-help hud-help-touch" : "hud-help";
     help.dataset.testid = "controls-help";
     help.innerHTML = touchMode
-      ? "<b>Analógico</b> mover (até a borda: correr)<br><b>Arraste a tela</b> câmera · <b>Ação</b> bater ou pescar · <b>😊😢😠💡</b> reações"
+      ? "<b>Analógico</b> mover (até a borda: correr)<br><b>Arraste a tela</b> câmera · <b>Ação</b> bater, pescar ou negociar · <b>😊😢😠💡</b> reações"
       : "<b>WASD</b> mover · <b>Shift</b> correr · <b>Espaço</b> pular<br>" +
-        "<b>Clique</b> ou <b>F</b> ação (bater/pescar) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
+        "<b>Clique</b> ou <b>F</b> ação (bater/pescar/negociar) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
 
     const topRight = document.createElement("div");
     topRight.className = "hud-top-right";
-    topRight.append(this.musicButton, this.fishCount, this.online);
+    topRight.append(this.musicButton, this.fishCount, this.money, this.online);
     this.root.append(topRight, this.status, this.hint, this.action, help);
     container.appendChild(this.root);
   }
@@ -70,6 +77,10 @@ export class Hud {
 
   setFishCount(count: number): void {
     this.fishCount.textContent = `🐟 ${count}`;
+  }
+
+  setMoney(amount: number): void {
+    this.money.textContent = `💰 ${formatMoney(amount)}`;
   }
 
   /** Mostra o que o botão de Ação faz agora (ex.: "Bater", "Pescar"). */

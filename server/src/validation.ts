@@ -1,6 +1,14 @@
 // Validação e sanitização de tudo que chega do cliente. Nunca confie no cliente.
-import { MAX_FISH_CAUGHT, MAX_HEIGHT, NAME_MAX_LENGTH, NAME_MIN_LENGTH, PLAYER_COLORS, PLAYER_RADIUS, WORLD_HALF } from "@jogo/shared/constants";
-import { ANIM_STATES, type AnimState, type FeedAnimalMessage, type StateMessage, type Vec3 } from "@jogo/shared/protocol";
+import { MAX_FISH_CAUGHT, MAX_HEIGHT, MAX_MONEY, NAME_MAX_LENGTH, NAME_MIN_LENGTH, PLAYER_COLORS, PLAYER_RADIUS, WORLD_HALF } from "@jogo/shared/constants";
+import { isItemId } from "@jogo/shared/items";
+import {
+  ANIM_STATES,
+  type AnimState,
+  type FeedAnimalMessage,
+  type StateMessage,
+  type TradeMessage,
+  type Vec3,
+} from "@jogo/shared/protocol";
 import { clamp } from "@jogo/shared/math";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -29,15 +37,22 @@ export function isValidColor(value: unknown): value is string {
 }
 
 /** Valida o formato do `join`. Nome e cor são verificados na sala (para dar o motivo certo). */
-export function parseJoin(value: unknown): { name: unknown; color: unknown; fishCaught: number } | null {
+export function parseJoin(
+  value: unknown,
+): { name: unknown; color: unknown; fishCaught: number; money: number } | null {
   if (!isRecord(value)) return null;
-  return { name: value.name, color: value.color, fishCaught: parseFishCount(value.fishCaught) };
+  return {
+    name: value.name,
+    color: value.color,
+    fishCaught: parseCount(value.fishCaught, MAX_FISH_CAUGHT),
+    money: parseCount(value.money, MAX_MONEY),
+  };
 }
 
-/** Contagem de peixes vinda do cliente ao reconectar: inteiro entre 0 e `MAX_FISH_CAUGHT`; senão 0. */
-export function parseFishCount(value: unknown): number {
+/** Contagem vinda do cliente ao reconectar (peixes, dinheiro): inteiro entre 0 e `max`; senão 0. */
+export function parseCount(value: unknown, max: number): number {
   if (!isFiniteNumber(value) || !Number.isInteger(value)) return 0;
-  return clamp(value, 0, MAX_FISH_CAUGHT);
+  return clamp(value, 0, max);
 }
 
 function parseVec3(value: unknown): Vec3 | null {
@@ -65,6 +80,13 @@ export function parseState(value: unknown): StateMessage | null {
 export function parseFeedAnimal(value: unknown): FeedAnimalMessage | null {
   if (!isRecord(value) || typeof value.animalId !== "string" || value.animalId.length > 64) return null;
   return { animalId: value.animalId };
+}
+
+/** Valida o `trade`. Distância, dinheiro e estoque são conferidos na sala. */
+export function parseTrade(value: unknown): TradeMessage | null {
+  if (!isRecord(value) || !isItemId(value.item)) return null;
+  if (value.action !== "buy" && value.action !== "sell") return null;
+  return { item: value.item, action: value.action };
 }
 
 /** Mantém a posição dentro do mapa. */

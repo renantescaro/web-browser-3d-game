@@ -1,4 +1,5 @@
 // Tipos de TODAS as mensagens de rede. Fonte única da verdade para cliente e servidor.
+import type { ItemId } from "./items";
 
 export interface Vec3 {
   x: number;
@@ -21,6 +22,8 @@ export interface PlayerSnapshot {
   anim: AnimState;
   /** Quantos peixes o jogador já pescou (atributo do jogador, guardado no servidor). */
   fishCaught: number;
+  /** Dinheiro do jogador, em reais. */
+  money: number;
 }
 
 export type JoinRejectReason = "full" | "invalidName" | "colorTaken";
@@ -91,6 +94,43 @@ export interface SquareData {
   fountain: FountainData;
 }
 
+/** Estilos de chapéu de um personagem. */
+export const HAT_STYLES = ["cap", "wide"] as const;
+export type HatStyle = (typeof HAT_STYLES)[number];
+
+/** Aparência de um personagem humano. Jogadores só escolhem a cor da camisa; NPCs podem mudar tudo. */
+export interface CharacterAppearance {
+  /** Camisa (e a borda do rótulo do nome). Nos jogadores, a cor escolhida. */
+  shirtColor: string;
+  /** Calça; se ausente, a camisa escurecida. */
+  pantsColor?: string;
+  /** Pele; se ausente, o tom padrão. */
+  skinColor?: string;
+  hat?: { style: HatStyle; color: string };
+  /** Avental na frente do tronco. */
+  apronColor?: string;
+  /** Bigode. */
+  mustacheColor?: string;
+}
+
+/** Quanto de cada item o comerciante tem. */
+export type MerchantStock = Record<ItemId, number>;
+
+/** O comerciante: um humano atrás de uma mesa com placa, ao lado da praça. */
+export interface MerchantData {
+  name: string;
+  appearance: CharacterAppearance;
+  /** Posição dos pés do comerciante. */
+  position: Vec3;
+  /** Olha para o lado dos clientes (a mesa fica à frente dele). */
+  rotationY: number;
+  /** Centro da mesa (y = 0). Para negociar, o jogador fica perto dela. */
+  table: Vec3;
+  /** Texto da placa da mesa. */
+  signText: string;
+  stock: MerchantStock;
+}
+
 export type ReactionId = 0 | 1 | 2 | 3;
 
 export interface ReactionMessage {
@@ -104,6 +144,8 @@ export interface JoinMessage {
   color: string;
   /** Peixes já pescados; o cliente reenvia ao reconectar para não perder a contagem. */
   fishCaught?: number;
+  /** Dinheiro (reais); reenviado ao reconectar, como os peixes. */
+  money?: number;
 }
 
 export interface StateMessage {
@@ -123,6 +165,15 @@ export interface FeedAnimalMessage {
   animalId: string;
 }
 
+/** Do ponto de vista do jogador: comprar do comerciante ou vender para ele. */
+export type TradeAction = "buy" | "sell";
+
+/** Compra ou venda de uma unidade de um item com o comerciante. */
+export interface TradeMessage {
+  item: ItemId;
+  action: TradeAction;
+}
+
 // --- Servidor → cliente ---
 export interface LobbyMessage {
   takenColors: string[];
@@ -135,6 +186,7 @@ export interface WelcomeMessage {
   animals: AnimalData[];
   trees: TreeData[];
   square: SquareData;
+  merchant: MerchantData;
 }
 
 export interface JoinRejectedMessage {
@@ -169,6 +221,17 @@ export interface FishCountMessage {
   count: number;
 }
 
+/** Dinheiro atualizado do próprio jogador (reais). */
+export interface MoneyMessage {
+  amount: number;
+}
+
+/** O estoque do comerciante mudou porque `playerId` negociou com ele. Vai para todos. */
+export interface MerchantStockMessage {
+  stock: MerchantStock;
+  playerId: string;
+}
+
 /** Um animal ganhou peixe: todos mostram o coração acima dele. */
 export interface AnimalFedMessage {
   animalId: string;
@@ -189,6 +252,7 @@ export interface ClientToServerEvents {
   reaction: (reactionId: ReactionId) => void;
   fishCaught: (msg: FishCaughtMessage) => void;
   feedAnimal: (msg: FeedAnimalMessage) => void;
+  trade: (msg: TradeMessage) => void;
 }
 
 /** Eventos que o servidor envia (tipagem do Socket.IO). */
@@ -203,4 +267,6 @@ export interface ServerToClientEvents {
   reaction: (msg: ReactionMessage) => void;
   fishCount: (msg: FishCountMessage) => void;
   animalFed: (msg: AnimalFedMessage) => void;
+  money: (msg: MoneyMessage) => void;
+  merchantStock: (msg: MerchantStockMessage) => void;
 }

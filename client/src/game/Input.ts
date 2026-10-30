@@ -8,9 +8,9 @@ export interface Intents {
   moveZ: number;
   run: boolean;
   jump: boolean;
-  /** Botão de Ação (F/clique): bate, ou pesca/fisga na fonte, conforme o contexto. */
+  /** Botão de Ação (F/clique): bate, pesca/fisga, dá peixe ou negocia, conforme o contexto. */
   action: boolean;
-  /** Sair do que estiver fazendo (Esc/Q), ex.: o minigame de pesca. */
+  /** Sair do que estiver fazendo (Esc/Q), ex.: o minigame de pesca ou o comerciante. */
   cancel: boolean;
   /** Liga/desliga a música (tecla M). */
   toggleMusic: boolean;
@@ -27,6 +27,8 @@ export class Input {
   private cancelQueued = false;
   private musicQueued = false;
   private reactionQueued: number | null = null;
+  /** O próprio jogo pediu para soltar o mouse (não é "sair"). */
+  private releasing = false;
   private lookDX = 0;
   private lookDY = 0;
   /** Avisado quando o pointer lock muda (para a HUD). */
@@ -129,9 +131,17 @@ export class Input {
     this.lookDY += e.movementY;
   };
 
+  /** Solta o mouse (ex.: para clicar num painel) sem que isso conte como "sair". */
+  releasePointerLock(): void {
+    if (!this.pointerLocked) return;
+    this.releasing = true;
+    document.exitPointerLock();
+  }
+
   private readonly onLockChange = (): void => {
     // Com o mouse preso o navegador consome o Esc; soltar o mouse também conta como "sair".
-    if (!this.pointerLocked) this.cancelQueued = true;
+    if (!this.pointerLocked && !this.releasing) this.cancelQueued = true;
+    this.releasing = false;
     this.onPointerLockChange?.(this.pointerLocked);
   };
 

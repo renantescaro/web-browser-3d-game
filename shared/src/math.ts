@@ -25,6 +25,21 @@ export function distanceXZ(a: { x: number; z: number }, b: { x: number; z: numbe
   return Math.hypot(a.x - b.x, a.z - b.z);
 }
 
+/** O jogador está a até `maxDist` de `target` e olhando para ele, dentro do cone `coneDeg`? */
+export function isFacingPoint(
+  player: { x: number; z: number },
+  rotationY: number,
+  target: { x: number; z: number },
+  maxDist: number,
+  coneDeg: number,
+): boolean {
+  const dist = distanceXZ(player, target);
+  if (dist > maxDist || dist < 0.01) return false;
+  const forward = forwardFromYaw(rotationY);
+  const cos = (forward.x * (target.x - player.x) + forward.z * (target.z - player.z)) / dist;
+  return cos >= Math.cos(((coneDeg / 2) * Math.PI) / 180);
+}
+
 /**
  * O jogador está de frente para a fonte e perto da borda?
  * `reach` é a distância máxima do centro do jogador até a borda.
@@ -37,9 +52,5 @@ export function isFacingFountain(
   reach: number,
   coneDeg: number,
 ): boolean {
-  const dist = distanceXZ(player, fountain);
-  if (dist > fountainRadius + reach || dist < 0.01) return false;
-  const forward = forwardFromYaw(rotationY);
-  const cos = (forward.x * (fountain.x - player.x) + forward.z * (fountain.z - player.z)) / dist;
-  return cos >= Math.cos(((coneDeg / 2) * Math.PI) / 180);
+  return isFacingPoint(player, rotationY, fountain, fountainRadius + reach, coneDeg);
 }

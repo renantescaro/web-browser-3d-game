@@ -2,7 +2,8 @@
 import * as THREE from "three";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { PUNCH_ANIM_MS, REACTION_DURATION_MS, RUN_SPEED, WALK_SPEED } from "@jogo/shared/constants";
-import type { AnimState } from "@jogo/shared/protocol";
+import type { AnimState, CharacterAppearance } from "@jogo/shared/protocol";
+import { buildAccessories } from "./CharacterAccessories";
 import { FishingRod } from "./FishingRod";
 
 const SKIN_COLOR = 0xe0b48f;
@@ -56,10 +57,14 @@ export class Character {
   private punchElapsed = Infinity;
   private hitElapsed = Infinity;
 
-  constructor(name: string, color: string) {
+  /** `appearance` pode ser só a cor da camisa (jogadores) ou a aparência completa (NPCs). */
+  constructor(name: string, appearance: CharacterAppearance | string) {
+    const look = typeof appearance === "string" ? { shirtColor: appearance } : appearance;
+    const color = look.shirtColor;
     const mainMat = this.material(color);
     const limbMat = this.material(new THREE.Color(color).multiplyScalar(0.72));
-    const skinMat = this.material(SKIN_COLOR);
+    const pantsMat = look.pantsColor ? this.material(look.pantsColor) : limbMat;
+    const skinMat = this.material(look.skinColor ?? SKIN_COLOR);
     const eyeMat = this.material(EYE_COLOR);
 
     this.root.add(this.body);
@@ -83,8 +88,11 @@ export class Character {
     // A direita do personagem (olhando para +Z) fica em -X.
     this.limb(this.rightArm, armGeo, limbMat, -ARM.x, SHOULDER_Y, ARM.length / 2 + ARM.radius - 0.02);
     this.limb(this.leftArm, armGeo, limbMat, ARM.x, SHOULDER_Y, ARM.length / 2 + ARM.radius - 0.02);
-    this.limb(this.rightLeg, legGeo, limbMat, -LEG.x, HIP_Y, LEG.length / 2 + LEG.radius);
-    this.limb(this.leftLeg, legGeo, limbMat, LEG.x, HIP_Y, LEG.length / 2 + LEG.radius);
+    this.limb(this.rightLeg, legGeo, pantsMat, -LEG.x, HIP_Y, LEG.length / 2 + LEG.radius);
+    this.limb(this.leftLeg, legGeo, pantsMat, LEG.x, HIP_Y, LEG.length / 2 + LEG.radius);
+
+    const kit = { material: (c: THREE.ColorRepresentation) => this.material(c), mesh: this.mesh.bind(this) };
+    buildAccessories(look, kit, head, this.body);
 
     // Vara de pescar na mão direita (só aparece pescando).
     this.rod.root.position.y = -(ARM.length + ARM.radius);

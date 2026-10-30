@@ -1,6 +1,7 @@
 // Liga o botão de Ação aos peixes: detecta se o jogador está de frente para a fonte,
 // abre/fecha o minigame, mostra a vara e manda os peixes pescados ao servidor.
 // Com peixe no inventário e de frente para um gato ou cachorro, a Ação dá um peixe a ele.
+// De frente para a mesa do comerciante, a Ação abre (ou fecha) o painel de negociar.
 import { FISHING_FACING_DEG, FISHING_REACH, FOUNTAIN_RADIUS } from "@jogo/shared/constants";
 import { distanceXZ, isFacingFountain } from "@jogo/shared/math";
 import type { LocalPlayer } from "../entities/LocalPlayer";
@@ -9,10 +10,18 @@ import type { Network } from "../net/Network";
 import { FishingPanel } from "../ui/FishingPanel";
 import { FishingMinigame, type FishingPhase } from "./FishingMinigame";
 import type { Intents } from "./Input";
+import type { MerchantController } from "./MerchantController";
 import type { SquareManager } from "./SquareManager";
 
 /** Rótulos do botão de Ação. */
-export const ACTION_LABELS = { punch: "Bater", fish: "Pescar", hook: "Fisgar", feed: "Dar peixe" } as const;
+export const ACTION_LABELS = {
+  punch: "Bater",
+  fish: "Pescar",
+  hook: "Fisgar",
+  feed: "Dar peixe",
+  trade: "Negociar",
+  closeTrade: "Fechar",
+} as const;
 export type ActionLabel = (typeof ACTION_LABELS)[keyof typeof ACTION_LABELS];
 
 /** Folga extra (m) antes de o minigame fechar sozinho porque o jogador foi empurrado para longe. */
@@ -47,6 +56,7 @@ export class FishingController {
     private readonly square: SquareManager,
     private readonly network: Network,
     private readonly animals: AnimalsManager,
+    private readonly merchant: MerchantController,
     private readonly selfId: () => string,
   ) {
     this.panel = new FishingPanel(container, touchMode);
@@ -96,7 +106,11 @@ export class FishingController {
     this.setLabel(
       this.minigame
         ? ACTION_LABELS.hook
-        : this.feedTarget()
+        : this.merchant.active
+          ? ACTION_LABELS.closeTrade
+          : this.merchant.canTrade()
+            ? ACTION_LABELS.trade
+            : this.feedTarget()
           ? ACTION_LABELS.feed
           : this.canFish()
             ? ACTION_LABELS.fish
@@ -109,6 +123,14 @@ export class FishingController {
     if (this.minigame) {
       if (this.minigame.press() === "caught") this.network.catchFish();
       this.panel.render(this.minigame);
+      return true;
+    }
+    if (this.merchant.active) {
+      this.merchant.close();
+      return true;
+    }
+    if (this.merchant.canTrade()) {
+      this.merchant.open();
       return true;
     }
     // O servidor confere, desconta o peixe e responde com `fishCount` e `animalFed`.

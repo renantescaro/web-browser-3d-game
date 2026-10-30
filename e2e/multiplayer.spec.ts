@@ -7,6 +7,8 @@ import {
   FOUNTAIN_MAX_FISH,
   FOUNTAIN_MIN_FISH,
   MAX_PLAYERS,
+  MERCHANT_SIGN_TEXT,
+  MERCHANT_TRADE_RANGE,
   PLAYER_COLORS,
   SERVER_PORT,
   SQUARE_MAX_BENCHES,
@@ -18,11 +20,14 @@ import {
   TREE_MIN_SCALE,
   WORLD_HALF,
 } from "@jogo/shared/constants";
+import { ITEMS } from "@jogo/shared/items";
 import type {
   AnimalSnapshot,
   AnimalType,
   ClientToServerEvents,
   LobbyMessage,
+  MerchantData,
+  MerchantStock,
   ServerToClientEvents,
   Vec3,
 } from "@jogo/shared/protocol";
@@ -98,12 +103,19 @@ async function closeAll(pages: Page[]): Promise<void> {
   await Promise.all(pages.map((p) => p.context().close()));
 }
 
-/** Contorna a placa (que fica entre o centro do mapa e a fonte) e chega na borda da fonte. */
+/**
+ * Contorna a placa (que fica entre o centro do mapa e a fonte) pelo lado oposto à barraca
+ * do comerciante (que fica ao lado da placa) e chega na borda da fonte.
+ */
 async function walkToFountain(page: Page): Promise<void> {
   const square = await page.evaluate(() => window.__jogo!.square()!);
+  const merchant = await page.evaluate(() => window.__jogo!.merchant()!);
   const { x: fx, z: fz } = square.fountain;
   const d = Math.hypot(fx, fz);
-  await walkTo(page, fx + (-fz / d) * 4, fz + (fx / d) * 4, 1);
+  const side = [1, -1]
+    .map((s) => ({ x: fx + ((s * -fz) / d) * 4, z: fz + ((s * fx) / d) * 4 }))
+    .sort((a, b) => Math.hypot(b.x - merchant.x, b.z - merchant.z) - Math.hypot(a.x - merchant.x, a.z - merchant.z))[0]!;
+  await walkTo(page, side.x, side.z, 1);
   await walkTo(page, fx, fz, 3.3);
 }
 
@@ -127,30 +139,41 @@ async function hookOneFish(page: Page): Promise<void> {
   }
 }
 
-/** Bot com peixes no inventário (como numa reconexão), que anda mandando `state` direto. */
+/** Bot com peixes (e dinheiro) no inventário, como numa reconexão, que anda mandando `state` direto. */
 class FishBot {
   position: Vec3 = { x: 0, y: 0, z: 0 };
   animals: AnimalSnapshot[] = [];
   fishCounts: number[] = [];
   fedAnimals: string[] = [];
+  moneys: number[] = [];
+  stocks: MerchantStock[] = [];
+  merchant: MerchantData | null = null;
+  /** Dinheiro informado no `welcome`. */
+  initialMoney = 0;
   private readonly types = new Map<string, AnimalType>();
 
   private constructor(readonly socket: BotSocket) {
     socket.on("snapshot", (msg) => (this.animals = msg.animals));
     socket.on("fishCount", ({ count }) => this.fishCounts.push(count));
     socket.on("animalFed", ({ animalId }) => this.fedAnimals.push(animalId));
+    socket.on("money", ({ amount }) => this.moneys.push(amount));
+    socket.on("merchantStock", ({ stock }) => this.stocks.push(stock));
   }
 
-  static async join(name: string, color: string, fishCaught: number): Promise<FishBot> {
+  static async join(name: string, color: string, fishCaught: number, money = 0): Promise<FishBot> {
     const { socket } = await connectBot();
     const bot = new FishBot(socket);
     const welcome = await new Promise<Parameters<ServerToClientEvents["welcome"]>[0]>((resolve, reject) => {
       socket.once("welcome", resolve);
       socket.once("joinRejected", ({ reason }) => reject(new Error(`bot recusado: ${reason}`)));
-      socket.emit("join", { name, color, fishCaught });
+      socket.emit("join", { name, color, fishCaught, money });
     });
     const self = welcome.players.find((p) => p.id === welcome.selfId);
-    if (self) bot.position = self.position;
+    if (self) {
+      bot.position = self.position;
+      bot.initialMoney = self.money;
+    }
+    bot.merchant = welcome.merchant;
     for (const a of welcome.animals) bot.types.set(a.id, a.type);
     await expect.poll(() => bot.animals.length).toBe(welcome.animals.length);
     return bot;
@@ -414,6 +437,129 @@ test("dar peixe pelo botão de Ação: só com peixe no inventário, mostra cora
 
   // Sem peixe, a Ação volta a ser Bater.
   await expect(action).toContainText("Bater");
+  await closeAll([page]);
+});
+
+/** Ponto de onde o cliente negocia: à frente da mesa, do lado oposto ao comerciante. */
+function customerSpot(m: { x: number; z: number; table: { x: number; z: number } }): { x: number; z: number } {
+  const dx = m.table.x - m.x;
+  const dz = m.table.z - m.z;
+  const d = Math.hypot(dx, dz);
+  return { x: m.table.x + (dx / d) * 1.2, z: m.table.z + (dz / d) * 1.2 };
+}
+
+/** Da fonte até a mesa do comerciante: sai para um anel em volta da fonte, contorna e segue reto pelo vão entre os bancos. */
+async function walkFromFountainToMerchant(page: Page): Promise<void> {
+  const square = await page.evaluate(() => window.__jogo!.square()!);
+  const merchant = await page.evaluate(() => window.__jogo!.merchant()!);
+  const { x: fx, z: fz } = square.fountain;
+  const ring = 5;
+  const at = (angle: number) => [fx + Math.sin(angle) * ring, fz + Math.cos(angle) * ring] as const;
+  const me = await page.evaluate(() => window.__jogo!.local());
+  let angle = Math.atan2(me.x - fx, me.z - fz);
+  const target = Math.atan2(merchant.x - fx, merchant.z - fz);
+  await walkTo(page, ...at(angle), 0.8);
+  let diff = Math.atan2(Math.sin(target - angle), Math.cos(target - angle));
+  while (Math.abs(diff) > 0.05) {
+    const step = Math.sign(diff) * Math.min(Math.abs(diff), 0.5);
+    angle += step;
+    diff -= step;
+    await walkTo(page, ...at(angle), 0.8);
+  }
+  const spot = customerSpot(merchant);
+  await walkTo(page, spot.x, spot.z, 0.4);
+}
+
+test("comerciante compra e vende peixe, com estoque e validação no servidor", async () => {
+  const fishPrice = ITEMS.fish.price;
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const bot = await FishBot.join("Freguês", PLAYER_COLORS[2], 2, 0);
+  try {
+    const merchant = bot.merchant!;
+    expect(merchant.signText).toBe(MERCHANT_SIGN_TEXT);
+    const startStock = merchant.stock.fish;
+
+    // Longe da mesa: recusado.
+    bot.socket.emit("trade", { item: "fish", action: "sell" });
+    await wait(500);
+    expect(bot.moneys).toEqual([]);
+
+    const spot = customerSpot({ ...merchant.position, table: merchant.table });
+    await bot.walkTo(() => spot, 0.3);
+    const dist = Math.hypot(bot.position.x - merchant.table.x, bot.position.z - merchant.table.z);
+    expect(dist).toBeLessThan(MERCHANT_TRADE_RANGE);
+
+    // Sem dinheiro não compra; item desconhecido é ignorado.
+    bot.socket.emit("trade", { item: "fish", action: "buy" });
+    bot.socket.emit("trade", { item: "ouro", action: "buy" } as never);
+    await wait(500);
+    expect(bot.moneys).toEqual([]);
+
+    // Vende um peixe: ganha o preço, perde o peixe e o estoque (de todos) sobe.
+    bot.socket.emit("trade", { item: "fish", action: "sell" });
+    await expect.poll(() => bot.moneys).toEqual([fishPrice.sell]);
+    expect(bot.fishCounts).toEqual([1]);
+    expect(bot.stocks.at(-1)?.fish).toBe(startStock + 1);
+
+    // Compra de volta: paga o preço e o estoque desce.
+    await wait(300);
+    bot.socket.emit("trade", { item: "fish", action: "buy" });
+    await expect.poll(() => bot.moneys).toEqual([fishPrice.sell, fishPrice.sell - fishPrice.buy]);
+    expect(bot.fishCounts).toEqual([1, 2]);
+    expect(bot.stocks.at(-1)?.fish).toBe(startStock);
+  } finally {
+    bot.socket.disconnect();
+  }
+
+  // O dinheiro volta no `join` (reconexão) e é validado.
+  const rich = await FishBot.join("Rico", PLAYER_COLORS[3], 0, 7);
+  const cheater = await FishBot.join("Trapaça", PLAYER_COLORS[4], 0, -5);
+  expect(rich.initialMoney).toBe(7);
+  expect(cheater.initialMoney).toBe(0);
+  rich.socket.disconnect();
+  cheater.socket.disconnect();
+});
+
+test("comerciante pelo botão de Ação: Negociar abre o painel, vende e compra peixe", async ({ browser }) => {
+  const page = await joinAs(browser, "Pescador", 7);
+  const action = page.getByTestId("action-label");
+  const panel = page.getByTestId("merchant-panel");
+  await expect(page.getByTestId("money")).toHaveText("💰 R$ 0");
+
+  await walkToFountain(page);
+  await page.keyboard.press("KeyF");
+  await hookOneFish(page);
+  await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
+  await page.keyboard.press("KeyQ");
+
+  await walkFromFountainToMerchant(page);
+  await expect(action).toContainText("Negociar");
+  await page.keyboard.press("KeyF");
+  await expect(panel).toBeVisible();
+  await expect(action).toContainText("Fechar");
+  const stock = (await page.evaluate(() => window.__jogo!.merchant()!)).stock.fish ?? 0;
+  await expect(page.getByTestId("merchant-stock-fish")).toHaveText(`Estoque: ${stock}`);
+  await expect(page.getByTestId("merchant-buy-fish")).toBeDisabled();
+
+  // Vende o peixe: o dinheiro sobe, o peixe sai e o comerciante comemora.
+  await page.getByTestId("merchant-sell-fish").click();
+  await expect(page.getByTestId("money")).toHaveText("💰 R$ 1");
+  await expect(page.getByTestId("fish-count")).toHaveText("🐟 0");
+  await expect(page.getByTestId("merchant-stock-fish")).toHaveText(`Estoque: ${stock + 1}`);
+  await expect(page.getByTestId("merchant-wallet")).toContainText("R$ 1");
+  await expect(page.locator(".reaction-bubble--active", { hasText: "💰" })).toHaveCount(1);
+  await expect(page.getByTestId("merchant-sell-fish")).toBeDisabled();
+
+  // Compra de volta.
+  await page.getByTestId("merchant-buy-fish").click();
+  await expect(page.getByTestId("money")).toHaveText("💰 R$ 0");
+  await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
+  await expect(page.getByTestId("merchant-stock-fish")).toHaveText(`Estoque: ${stock}`);
+
+  // Q fecha o painel.
+  await page.keyboard.press("KeyQ");
+  await expect(panel).toBeHidden();
+  await expect(action).toContainText("Negociar");
   await closeAll([page]);
 });
 

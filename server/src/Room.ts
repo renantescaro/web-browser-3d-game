@@ -6,8 +6,10 @@ import {
   FISHING_REACH,
   FOUNTAIN_RADIUS,
   KNOCKBACK_HORIZONTAL,
+  MERCHANT_TRADE_RANGE,
   MAX_FISH_CAUGHT,
   KNOCKBACK_UP,
+  MAX_MONEY,
   MAX_PLAUSIBLE_SPEED,
   MAX_PLAYERS,
   PLAYER_RADIUS,
@@ -15,9 +17,12 @@ import {
   PUNCH_COOLDOWN_MS,
   PUNCH_RANGE,
   SPAWN_RADIUS,
+  TRADE_COOLDOWN_MS,
 } from "@jogo/shared/constants";
-import type { HitMessage, JoinRejectReason, PlayerSnapshot, StateMessage, Vec3 } from "@jogo/shared/protocol";
+import { ITEMS, type ItemId } from "@jogo/shared/items";
+import type { HitMessage, JoinRejectReason, PlayerSnapshot, StateMessage, TradeMessage, Vec3 } from "@jogo/shared/protocol";
 import { distanceXZ, forwardFromYaw } from "@jogo/shared/math";
+import type { Merchant } from "./Merchant.js";
 import { clampToWorld, isValidColor, sanitizeName } from "./validation.js";
 
 interface PlayerRecord {
@@ -26,12 +31,22 @@ interface PlayerRecord {
   lastPunchAt: number;
   lastFishAt: number;
   lastFeedAt: number;
+  lastTradeAt: number;
 }
+
+/** Onde cada item fica guardado no jogador e quanto ele pode ter. Item novo: mapeie aqui. */
+const INVENTORY: Record<ItemId, { field: "fishCaught"; max: number }> = {
+  fish: { field: "fishCaught", max: MAX_FISH_CAUGHT },
+};
 
 /** Folga (m) na distância até a fonte, pela latência entre o cliente e o último `state`. */
 const FISHING_DISTANCE_SLACK = 1.5;
 /** Folga (m) na distância até o animal (latência + interpolação do animal no cliente). */
 const FEED_DISTANCE_SLACK = 1.5;
+/** Folga (m) na distância até a mesa do comerciante, pela latência. */
+const TRADE_DISTANCE_SLACK = 1.5;
+
+export type TradeResult = { money: number; fishCaught: number };
 
 export type JoinResult = { ok: true; player: PlayerSnapshot } | { ok: false; reason: JoinRejectReason };
 
@@ -54,7 +69,7 @@ export class Room {
     return [...this.players.values()].map((p) => p.snapshot);
   }
 
-  join(id: string, rawName: unknown, rawColor: unknown, fishCaught = 0): JoinResult {
+  join(id: string, rawName: unknown, rawColor: unknown, fishCaught = 0, money = 0): JoinResult {
     if (this.players.size >= MAX_PLAYERS) return { ok: false, reason: "full" };
     const name = sanitizeName(rawName);
     if (!name) return { ok: false, reason: "invalidName" };
@@ -69,8 +84,16 @@ export class Room {
       velocity: { x: 0, y: 0, z: 0 },
       anim: "idle",
       fishCaught,
+      money,
     };
-    this.players.set(id, { snapshot, lastStateAt: Date.now(), lastPunchAt: 0, lastFishAt: 0, lastFeedAt: 0 });
+    this.players.set(id, {
+      snapshot,
+      lastStateAt: Date.now(),
+      lastPunchAt: 0,
+      lastFishAt: 0,
+      lastFeedAt: 0,
+      lastTradeAt: 0,
+    });
     return { ok: true, player: snapshot };
   }
 
@@ -189,6 +212,37 @@ export class Room {
     const fishCaught = record.snapshot.fishCaught - 1;
     record.snapshot = { ...record.snapshot, fishCaught };
     return fishCaught;
+  }
+
+  /**
+   * Compra ou venda de uma unidade com o comerciante. Só vale perto da mesa, respeitando o
+   * intervalo, com dinheiro (ou o item) suficiente e estoque (ou espaço nele).
+   * Retorna o novo dinheiro e inventário do jogador, ou null se recusado.
+   */
+  trade(id: string, { item, action }: TradeMessage, merchant: Merchant): TradeResult | null {
+    const record = this.players.get(id);
+    if (!record) return null;
+    const now = Date.now();
+    if (now - record.lastTradeAt < TRADE_COOLDOWN_MS) return null;
+    if (distanceXZ(record.snapshot.position, merchant.table) > MERCHANT_TRADE_RANGE + TRADE_DISTANCE_SLACK) return null;
+
+    const { field, max } = INVENTORY[item];
+    const owned = record.snapshot[field];
+    let { money } = record.snapshot;
+    if (action === "buy") {
+      const price = ITEMS[item].price.buy;
+      if (money < price || owned >= max || !merchant.hasStock(item)) return null;
+      money -= price;
+    } else {
+      const price = ITEMS[item].price.sell;
+      if (owned <= 0 || money + price > MAX_MONEY || !merchant.hasRoom(item)) return null;
+      money += price;
+    }
+    const delta = action === "buy" ? 1 : -1;
+    merchant.changeStock(item, -delta);
+    record.lastTradeAt = now;
+    record.snapshot = { ...record.snapshot, money, [field]: owned + delta };
+    return { money, fishCaught: record.snapshot.fishCaught };
   }
 
   /** Escolhe um ponto de nascimento longe dos outros jogadores. */

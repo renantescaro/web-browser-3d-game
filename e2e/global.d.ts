@@ -34,6 +34,17 @@ declare global {
         z: number;
         followingId: string | null;
       }[];
+      merchant: () => {
+        name: string;
+        signText: string;
+        x: number;
+        z: number;
+        rotationY: number;
+        table: { x: number; z: number };
+        stock: Record<string, number>;
+        money: number;
+        open: boolean;
+      } | null;
     };
   }
 }

@@ -6,7 +6,8 @@
   "exports": {
     "./protocol": "./src/protocol.ts",
     "./constants": "./src/constants.ts",
-    "./math": "./src/math.ts"
+    "./math": "./src/math.ts",
+    "./items": "./src/items.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
