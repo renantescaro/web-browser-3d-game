@@ -1,8 +1,10 @@
-// Liga o botão de Ação à pesca: detecta se o jogador está de frente para a fonte,
+// Liga o botão de Ação aos peixes: detecta se o jogador está de frente para a fonte,
 // abre/fecha o minigame, mostra a vara e manda os peixes pescados ao servidor.
+// Com peixe no inventário e de frente para um gato ou cachorro, a Ação dá um peixe a ele.
 import { FISHING_FACING_DEG, FISHING_REACH, FOUNTAIN_RADIUS } from "@jogo/shared/constants";
 import { distanceXZ, isFacingFountain } from "@jogo/shared/math";
 import type { LocalPlayer } from "../entities/LocalPlayer";
+import type { AnimalsManager } from "./AnimalsManager";
 import type { Network } from "../net/Network";
 import { FishingPanel } from "../ui/FishingPanel";
 import { FishingMinigame, type FishingPhase } from "./FishingMinigame";
@@ -10,7 +12,7 @@ import type { Intents } from "./Input";
 import type { SquareManager } from "./SquareManager";
 
 /** Rótulos do botão de Ação. */
-export const ACTION_LABELS = { punch: "Bater", fish: "Pescar", hook: "Fisgar" } as const;
+export const ACTION_LABELS = { punch: "Bater", fish: "Pescar", hook: "Fisgar", feed: "Dar peixe" } as const;
 export type ActionLabel = (typeof ACTION_LABELS)[keyof typeof ACTION_LABELS];
 
 /** Folga extra (m) antes de o minigame fechar sozinho porque o jogador foi empurrado para longe. */
@@ -44,6 +46,8 @@ export class FishingController {
     private readonly local: LocalPlayer,
     private readonly square: SquareManager,
     private readonly network: Network,
+    private readonly animals: AnimalsManager,
+    private readonly selfId: () => string,
   ) {
     this.panel = new FishingPanel(container, touchMode);
     this.panel.onExit = () => this.stop();
@@ -72,6 +76,12 @@ export class FishingController {
     return isFacingFountain(p, this.local.rotationY, fountain, FOUNTAIN_RADIUS, FISHING_REACH, FISHING_FACING_DEG);
   }
 
+  /** Animal que receberia um peixe agora (precisa ter peixe no inventário), ou null. */
+  private feedTarget(): string | null {
+    if (this.count <= 0) return null;
+    return this.animals.feedTarget(this.local.renderPosition, this.local.rotationY, this.selfId());
+  }
+
   /** Chamar todo frame, antes de tratar a Ação: sai da pesca se pedido e atualiza o rótulo. */
   update(dt: number, intents: Intents): void {
     if (this.minigame) {
@@ -83,14 +93,28 @@ export class FishingController {
         this.panel.render(this.minigame);
       }
     }
-    this.setLabel(this.minigame ? ACTION_LABELS.hook : this.canFish() ? ACTION_LABELS.fish : ACTION_LABELS.punch);
+    this.setLabel(
+      this.minigame
+        ? ACTION_LABELS.hook
+        : this.feedTarget()
+          ? ACTION_LABELS.feed
+          : this.canFish()
+            ? ACTION_LABELS.fish
+            : ACTION_LABELS.punch,
+    );
   }
 
-  /** Trata o botão de Ação. Retorna false se não for com a pesca (aí a Ação é bater). */
+  /** Trata o botão de Ação. Retorna false se não for com peixes (aí a Ação é bater). */
   handleAction(): boolean {
     if (this.minigame) {
       if (this.minigame.press() === "caught") this.network.catchFish();
       this.panel.render(this.minigame);
+      return true;
+    }
+    // O servidor confere, desconta o peixe e responde com `fishCount` e `animalFed`.
+    const animalId = this.feedTarget();
+    if (animalId) {
+      this.network.feedAnimal(animalId);
       return true;
     }
     if (!this.canFish()) return false;

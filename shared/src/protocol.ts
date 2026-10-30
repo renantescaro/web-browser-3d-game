@@ -26,6 +26,8 @@ export interface PlayerSnapshot {
 export type JoinRejectReason = "full" | "invalidName" | "colorTaken";
 
 export type AnimalType = "dog" | "cat" | "horse";
+/** Animais que comem peixe (cavalos não comem). */
+export const FISH_EATING_ANIMALS: readonly AnimalType[] = ["dog", "cat"];
 
 export interface AnimalData {
   id: string;
@@ -116,6 +118,11 @@ export type PunchMessage = Record<string, never>;
 /** O cliente acertou o minigame; o servidor confere se ele está na fonte. */
 export type FishCaughtMessage = Record<string, never>;
 
+/** Dar um peixe do inventário a um gato ou cachorro, que passa a seguir o jogador. */
+export interface FeedAnimalMessage {
+  animalId: string;
+}
+
 // --- Servidor → cliente ---
 export interface LobbyMessage {
   takenColors: string[];
@@ -146,6 +153,8 @@ export interface AnimalSnapshot {
   id: string;
   position: Vec3;
   rotationY: number;
+  /** Jogador que o animal segue (o último que lhe deu peixe), ou null. */
+  followingId: string | null;
 }
 
 export interface SnapshotMessage {
@@ -158,6 +167,12 @@ export interface SnapshotMessage {
 /** Contagem atualizada de peixes do próprio jogador. */
 export interface FishCountMessage {
   count: number;
+}
+
+/** Um animal ganhou peixe: todos mostram o coração acima dele. */
+export interface AnimalFedMessage {
+  animalId: string;
+  playerId: string;
 }
 
 export interface HitMessage {
@@ -173,6 +188,7 @@ export interface ClientToServerEvents {
   punch: (msg: PunchMessage) => void;
   reaction: (reactionId: ReactionId) => void;
   fishCaught: (msg: FishCaughtMessage) => void;
+  feedAnimal: (msg: FeedAnimalMessage) => void;
 }
 
 /** Eventos que o servidor envia (tipagem do Socket.IO). */
@@ -186,4 +202,5 @@ export interface ServerToClientEvents {
   hit: (msg: HitMessage) => void;
   reaction: (msg: ReactionMessage) => void;
   fishCount: (msg: FishCountMessage) => void;
+  animalFed: (msg: AnimalFedMessage) => void;
 }

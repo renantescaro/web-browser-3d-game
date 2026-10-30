@@ -1,6 +1,6 @@
 // Validação e sanitização de tudo que chega do cliente. Nunca confie no cliente.
 import { MAX_FISH_CAUGHT, MAX_HEIGHT, NAME_MAX_LENGTH, NAME_MIN_LENGTH, PLAYER_COLORS, PLAYER_RADIUS, WORLD_HALF } from "@jogo/shared/constants";
-import { ANIM_STATES, type AnimState, type StateMessage, type Vec3 } from "@jogo/shared/protocol";
+import { ANIM_STATES, type AnimState, type FeedAnimalMessage, type StateMessage, type Vec3 } from "@jogo/shared/protocol";
 import { clamp } from "@jogo/shared/math";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -59,6 +59,12 @@ export function parseState(value: unknown): StateMessage | null {
   const { rotationY, anim } = value;
   if (!position || !velocity || !isFiniteNumber(rotationY) || !isAnimState(anim)) return null;
   return { position: clampToWorld(position), velocity, rotationY, anim };
+}
+
+/** Valida o `feedAnimal`. Se o animal existe e come peixe, é conferido no servidor. */
+export function parseFeedAnimal(value: unknown): FeedAnimalMessage | null {
+  if (!isRecord(value) || typeof value.animalId !== "string" || value.animalId.length > 64) return null;
+  return { animalId: value.animalId };
 }
 
 /** Mantém a posição dentro do mapa. */

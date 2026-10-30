@@ -1,6 +1,7 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { io, type Socket } from "socket.io-client";
 import {
+  ANIMAL_FOLLOW_DISTANCE,
   FISH_MAX_SCALE,
   FISH_MIN_SCALE,
   FOUNTAIN_MAX_FISH,
@@ -17,7 +18,14 @@ import {
   TREE_MIN_SCALE,
   WORLD_HALF,
 } from "@jogo/shared/constants";
-import type { ClientToServerEvents, LobbyMessage, ServerToClientEvents } from "@jogo/shared/protocol";
+import type {
+  AnimalSnapshot,
+  AnimalType,
+  ClientToServerEvents,
+  LobbyMessage,
+  ServerToClientEvents,
+  Vec3,
+} from "@jogo/shared/protocol";
 
 type BotSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const SERVER_URL = `http://localhost:${SERVER_PORT}`;
@@ -88,6 +96,104 @@ async function walkTo(page: Page, x: number, z: number, within: number): Promise
 
 async function closeAll(pages: Page[]): Promise<void> {
   await Promise.all(pages.map((p) => p.context().close()));
+}
+
+/** Contorna a placa (que fica entre o centro do mapa e a fonte) e chega na borda da fonte. */
+async function walkToFountain(page: Page): Promise<void> {
+  const square = await page.evaluate(() => window.__jogo!.square()!);
+  const { x: fx, z: fz } = square.fountain;
+  const d = Math.hypot(fx, fz);
+  await walkTo(page, fx + (-fz / d) * 4, fz + (fx / d) * 4, 1);
+  await walkTo(page, fx, fz, 3.3);
+}
+
+/** Com o minigame aberto, aperta quando o marcador estiver na área certa (tenta algumas rodadas). */
+async function hookOneFish(page: Page): Promise<void> {
+  const fishing = () => page.evaluate(() => window.__jogo!.fishing());
+  const start = (await fishing()).count;
+  for (let attempt = 0; attempt < 5 && (await fishing()).count === start; attempt++) {
+    await page.waitForFunction(
+      () => {
+        const f = window.__jogo!.fishing();
+        const margin = (f.zoneEnd - f.zoneStart) * 0.25;
+        return f.phase === "playing" && f.marker > f.zoneStart + margin && f.marker < f.zoneEnd - margin;
+      },
+      undefined,
+      { timeout: 10_000, polling: "raf" },
+    );
+    await page.keyboard.press("KeyF");
+    await expect.poll(async () => (await fishing()).phase).not.toBe("playing");
+    await page.waitForTimeout(300);
+  }
+}
+
+/** Bot com peixes no inventário (como numa reconexão), que anda mandando `state` direto. */
+class FishBot {
+  position: Vec3 = { x: 0, y: 0, z: 0 };
+  animals: AnimalSnapshot[] = [];
+  fishCounts: number[] = [];
+  fedAnimals: string[] = [];
+  private readonly types = new Map<string, AnimalType>();
+
+  private constructor(readonly socket: BotSocket) {
+    socket.on("snapshot", (msg) => (this.animals = msg.animals));
+    socket.on("fishCount", ({ count }) => this.fishCounts.push(count));
+    socket.on("animalFed", ({ animalId }) => this.fedAnimals.push(animalId));
+  }
+
+  static async join(name: string, color: string, fishCaught: number): Promise<FishBot> {
+    const { socket } = await connectBot();
+    const bot = new FishBot(socket);
+    const welcome = await new Promise<Parameters<ServerToClientEvents["welcome"]>[0]>((resolve, reject) => {
+      socket.once("welcome", resolve);
+      socket.once("joinRejected", ({ reason }) => reject(new Error(`bot recusado: ${reason}`)));
+      socket.emit("join", { name, color, fishCaught });
+    });
+    const self = welcome.players.find((p) => p.id === welcome.selfId);
+    if (self) bot.position = self.position;
+    for (const a of welcome.animals) bot.types.set(a.id, a.type);
+    await expect.poll(() => bot.animals.length).toBe(welcome.animals.length);
+    return bot;
+  }
+
+  get id(): string {
+    return this.socket.id ?? "";
+  }
+
+  animal(id: string): AnimalSnapshot | undefined {
+    return this.animals.find((a) => a.id === id);
+  }
+
+  /** Anda (a 20 m/s, abaixo do limite do servidor) até ficar a `within` metros do alvo, que pode se mover. */
+  async walkTo(target: () => { x: number; z: number } | undefined, within: number): Promise<void> {
+    const step = 1;
+    for (let i = 0; i < 600; i++) {
+      const t = target();
+      if (!t) throw new Error("alvo sumiu");
+      const dx = t.x - this.position.x;
+      const dz = t.z - this.position.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < within) return;
+      const k = Math.min(step, dist - within * 0.5) / dist;
+      this.position = { x: this.position.x + dx * k, y: 0, z: this.position.z + dz * k };
+      this.socket.emit("state", {
+        position: this.position,
+        rotationY: Math.atan2(dx, dz),
+        velocity: { x: 0, y: 0, z: 0 },
+        anim: "run",
+      });
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error("não chegou ao alvo");
+  }
+
+  /** Animal mais próximo do tipo pedido. */
+  nearest(type: AnimalType): AnimalSnapshot {
+    const dist = (a: AnimalSnapshot) => Math.hypot(a.position.x - this.position.x, a.position.z - this.position.z);
+    const best = this.animals.filter((a) => this.types.get(a.id) === type).sort((a, b) => dist(a) - dist(b))[0];
+    if (!best) throw new Error(`nenhum animal do tipo ${type}`);
+    return best;
+  }
 }
 
 test.beforeEach(async () => {
@@ -179,12 +285,7 @@ test("pesca na fonte: botão de Ação vira Pescar, minigame fica mais difícil 
   await expect(action).toContainText("Bater");
   await expect(page.getByTestId("fish-count")).toHaveText("🐟 0");
 
-  // Contorna a placa (que fica entre o centro do mapa e a fonte) e chega na borda da fonte.
-  const square = await page.evaluate(() => window.__jogo!.square()!);
-  const { x: fx, z: fz } = square.fountain;
-  const d = Math.hypot(fx, fz);
-  await walkTo(page, fx + (-fz / d) * 4, fz + (fx / d) * 4, 1);
-  await walkTo(page, fx, fz, 3.3);
+  await walkToFountain(page);
   await expect(action).toContainText("Pescar");
 
   // Ação na frente da fonte: abre o minigame com a vara na mão (sem soco).
@@ -194,21 +295,7 @@ test("pesca na fonte: botão de Ação vira Pescar, minigame fica mais difícil 
   await expect.poll(async () => (await page.evaluate(() => window.__jogo!.local())).anim).toBe("fish");
   const firstSpeed = (await fishing()).speed;
 
-  // Aperta quando o marcador estiver dentro da área certa (tenta algumas rodadas).
-  for (let attempt = 0; attempt < 5 && (await fishing()).count === 0; attempt++) {
-    await page.waitForFunction(
-      () => {
-        const f = window.__jogo!.fishing();
-        const margin = (f.zoneEnd - f.zoneStart) * 0.25;
-        return f.phase === "playing" && f.marker > f.zoneStart + margin && f.marker < f.zoneEnd - margin;
-      },
-      undefined,
-      { timeout: 10_000, polling: "raf" },
-    );
-    await page.keyboard.press("KeyF");
-    await expect.poll(async () => (await fishing()).phase).not.toBe("playing");
-    await page.waitForTimeout(300);
-  }
+  await hookOneFish(page);
   await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
 
   // A próxima rodada é mais difícil.
@@ -223,6 +310,110 @@ test("pesca na fonte: botão de Ação vira Pescar, minigame fica mais difícil 
   await page.keyboard.up("KeyS");
   await expect(action).toContainText("Bater");
   await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
+  await closeAll([page]);
+});
+
+test("dar peixe: gatos e cachorros aceitam e passam a seguir, cavalos não comem", async () => {
+  const bot = await FishBot.join("Tratador", PLAYER_COLORS[5], 2);
+  try {
+    // Cavalo não come peixe: nada é descontado.
+    const horse = bot.nearest("horse");
+    await bot.walkTo(() => bot.animal(horse.id)?.position, 1.5);
+    bot.socket.emit("feedAnimal", { animalId: horse.id });
+    await new Promise((r) => setTimeout(r, 800));
+    expect(bot.fishCounts).toEqual([]);
+    expect(bot.animal(horse.id)?.followingId).toBeNull();
+
+    // Gato (o cachorro é testado pelo botão de Ação): desconta um peixe, todos recebem `animalFed` e ele segue o bot.
+    const pet = bot.nearest("cat");
+    await bot.walkTo(() => bot.animal(pet.id)?.position, 1.5);
+    bot.socket.emit("feedAnimal", { animalId: pet.id });
+    await expect.poll(() => bot.fishCounts).toEqual([1]);
+    expect(bot.fedAnimals).toEqual([pet.id]);
+    await expect.poll(() => bot.animal(pet.id)?.followingId).toBe(bot.id);
+
+    // Anda para longe: o animal vem atrás e para perto.
+    const goal = { x: bot.position.x * 0.5, z: bot.position.z * 0.5 + 12 };
+    await bot.walkTo(() => goal, 0.5);
+    await expect
+      .poll(
+        () => {
+          const p = bot.animal(pet.id)?.position;
+          return p ? Math.hypot(p.x - bot.position.x, p.z - bot.position.z) : Infinity;
+        },
+        { timeout: 10_000 },
+      )
+      .toBeLessThan(ANIMAL_FOLLOW_DISTANCE + 0.5);
+
+    // Já segue o bot: um segundo peixe para ele é recusado (não gasta o peixe).
+    bot.socket.emit("feedAnimal", { animalId: pet.id });
+    await new Promise((r) => setTimeout(r, 800));
+    expect(bot.fishCounts).toEqual([1]);
+  } finally {
+    bot.socket.disconnect();
+  }
+});
+
+test("dar peixe pelo botão de Ação: só com peixe no inventário, mostra coração e o animal segue", async ({
+  browser,
+}) => {
+  const page = await joinAs(browser, "Pescador", 3);
+  const action = page.getByTestId("action-label");
+  await walkToFountain(page);
+  await page.keyboard.press("KeyF");
+  await hookOneFish(page);
+  await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
+  await page.keyboard.press("KeyQ");
+  const me = await page.evaluate(() => window.__jogo!.local());
+  const selfId = await page.evaluate(() => window.__jogo!.selfId());
+
+  // Um bot atrai um cachorro até o pescador e sai (aí o cachorro para de segui-lo).
+  const bot = await FishBot.join("Isca", PLAYER_COLORS[6], 1);
+  const dog = bot.nearest("dog");
+  try {
+    await bot.walkTo(() => bot.animal(dog.id)?.position, 1.5);
+    bot.socket.emit("feedAnimal", { animalId: dog.id });
+    await expect.poll(() => bot.animal(dog.id)?.followingId).toBe(bot.id);
+    await bot.walkTo(() => ({ x: me.x + 3, z: me.z + 3 }), 0.5);
+    await expect
+      .poll(() => {
+        const p = bot.animal(dog.id)?.position;
+        return p ? Math.hypot(p.x - bot.position.x, p.z - bot.position.z) : Infinity;
+      }, { timeout: 15_000 })
+      .toBeLessThan(ANIMAL_FOLLOW_DISTANCE + 0.5);
+  } finally {
+    bot.socket.disconnect();
+  }
+
+  // O pescador vai até o cachorro: de frente para ele, a Ação vira "Dar peixe".
+  await page.keyboard.down("KeyW");
+  await expect
+    .poll(
+      () =>
+        page.evaluate((id) => {
+          const api = window.__jogo!;
+          const target = api.animals().find((a) => a.id === id);
+          if (!target) return false;
+          const p = api.local();
+          api.lookAt(target.x, target.z);
+          return Math.hypot(target.x - p.x, target.z - p.z) < 1.3 && api.fishing().label === "Dar peixe";
+        }, dog.id),
+      { intervals: [50], timeout: 15_000 },
+    )
+    .toBe(true);
+  await page.keyboard.up("KeyW");
+  await expect(action).toContainText("Dar peixe");
+
+  // Dá o peixe: o inventário zera, o coração surge e o cachorro passa a segui-lo.
+  await page.keyboard.press("KeyF");
+  await expect(page.getByTestId("fish-count")).toHaveText("🐟 0");
+  await expect(page.locator(".reaction-bubble--active", { hasText: "❤️" })).toHaveCount(1);
+  await expect
+    .poll(() => page.evaluate((id) => window.__jogo!.animals().find((a) => a.id === id)?.followingId, dog.id))
+    .toBe(selfId);
+
+  // Sem peixe, a Ação volta a ser Bater.
+  await expect(action).toContainText("Bater");
   await closeAll([page]);
 });
 

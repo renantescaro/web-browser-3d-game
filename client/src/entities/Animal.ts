@@ -1,4 +1,9 @@
 import * as THREE from "three";
+import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { REACTION_DURATION_MS } from "@jogo/shared/constants";
+
+/** Distância (m) do coração acima do ponto mais alto do animal. */
+const HEART_GAP = 0.3;
 
 /** Classe base para todos os animais: geometrias, materiais, body-bob e dispose. */
 export abstract class Animal {
@@ -9,6 +14,8 @@ export abstract class Animal {
   protected readonly geometries: THREE.BufferGeometry[] = [];
 
   private walkPhase = 0;
+  private heart: { label: CSS2DObject; bubble: HTMLDivElement } | null = null;
+  private heartTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(protected readonly color: string) {
     this.root.add(this.body);
@@ -53,7 +60,40 @@ export abstract class Animal {
     this.body.position.y = bob;
   }
 
+  /** Coração que surge acima do animal (ganhou peixe). Usa a mesma animação das reações. */
+  playHeart(): void {
+    const heart = this.heart ?? this.createHeart();
+    if (this.heartTimeout !== null) clearTimeout(this.heartTimeout);
+    heart.bubble.classList.remove("reaction-bubble--active");
+    void heart.bubble.offsetWidth; // força reflow para reiniciar a animação
+    heart.bubble.classList.add("reaction-bubble--active");
+    this.heartTimeout = setTimeout(() => {
+      heart.bubble.classList.remove("reaction-bubble--active");
+      this.heartTimeout = null;
+    }, REACTION_DURATION_MS);
+  }
+
+  private createHeart(): { label: CSS2DObject; bubble: HTMLDivElement } {
+    // O CSS2DRenderer sobrescreve o transform do wrapper; a animação fica no filho.
+    const wrapper = document.createElement("div");
+    wrapper.className = "reaction-wrapper";
+    const bubble = document.createElement("div");
+    bubble.className = "reaction-bubble";
+    bubble.textContent = "❤️";
+    wrapper.appendChild(bubble);
+    const label = new CSS2DObject(wrapper);
+    label.position.y = new THREE.Box3().setFromObject(this.body).max.y + HEART_GAP;
+    this.root.add(label);
+    this.heart = { label, bubble };
+    return this.heart;
+  }
+
   dispose(): void {
+    if (this.heartTimeout !== null) clearTimeout(this.heartTimeout);
+    if (this.heart) {
+      this.heart.label.removeFromParent();
+      this.heart.label.element.remove();
+    }
     this.root.removeFromParent();
     for (const g of this.geometries) g.dispose();
     for (const m of this.materials) m.dispose();

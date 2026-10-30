@@ -92,6 +92,19 @@ export const ANIMAL_COLORS_SMALL = ["#f0ede8", "#1a1a1a", "#7a7a7a", "#c8960c"] 
 /** Cores disponíveis para cavalos (marrom, preto). */
 export const ANIMAL_COLORS_HORSE = ["#7b4f2e", "#1a1a1a"] as const;
 
+// --- Dar peixe aos animais ---
+/** Distância máxima (m) do jogador até o gato/cachorro para dar peixe. */
+export const FEED_RANGE = 2;
+/** Abertura total (graus) do cone em que o jogador precisa estar olhando para o animal. */
+export const FEED_FACING_DEG = 90;
+/** Intervalo mínimo entre dois peixes dados, conferido no servidor (ms). */
+export const FEED_COOLDOWN_MS = 500;
+/** Distância (m) que o animal mantém do jogador que ele segue. */
+export const ANIMAL_FOLLOW_DISTANCE = 1.6;
+/** Seguindo: quanto a velocidade cresce por metro de atraso (1/s) e o máximo (m/s), acima da corrida. */
+export const ANIMAL_FOLLOW_CATCH_UP = 1.5;
+export const ANIMAL_FOLLOW_MAX_SPEED = 8.5;
+
 // --- Árvores ---
 /** Quantas árvores o servidor gera ao iniciar. */
 export const TREE_COUNT = 10;

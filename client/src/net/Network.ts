@@ -40,6 +40,11 @@ export class Network {
     if (this.socket.connected) this.socket.emit("fishCaught", {});
   }
 
+  /** Dá um peixe a um animal; o servidor confere e responde com `fishCount` e `animalFed`. */
+  feedAnimal(animalId: string): void {
+    if (this.socket.connected) this.socket.emit("feedAnimal", { animalId });
+  }
+
   sendState(state: StateMessage): void {
     if (this.socket.connected) this.socket.volatile.emit("state", state);
   }

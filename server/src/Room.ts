@@ -1,5 +1,7 @@
 // Estado da sala: entrada/saída, limite de jogadores, cores únicas, estados e socos.
 import {
+  FEED_COOLDOWN_MS,
+  FEED_RANGE,
   FISH_CATCH_COOLDOWN_MS,
   FISHING_REACH,
   FOUNTAIN_RADIUS,
@@ -23,10 +25,13 @@ interface PlayerRecord {
   lastStateAt: number;
   lastPunchAt: number;
   lastFishAt: number;
+  lastFeedAt: number;
 }
 
 /** Folga (m) na distância até a fonte, pela latência entre o cliente e o último `state`. */
 const FISHING_DISTANCE_SLACK = 1.5;
+/** Folga (m) na distância até o animal (latência + interpolação do animal no cliente). */
+const FEED_DISTANCE_SLACK = 1.5;
 
 export type JoinResult = { ok: true; player: PlayerSnapshot } | { ok: false; reason: JoinRejectReason };
 
@@ -65,7 +70,7 @@ export class Room {
       anim: "idle",
       fishCaught,
     };
-    this.players.set(id, { snapshot, lastStateAt: Date.now(), lastPunchAt: 0, lastFishAt: 0 });
+    this.players.set(id, { snapshot, lastStateAt: Date.now(), lastPunchAt: 0, lastFishAt: 0, lastFeedAt: 0 });
     return { ok: true, player: snapshot };
   }
 
@@ -161,6 +166,27 @@ export class Room {
     if (distanceXZ(record.snapshot.position, fountain) > maxDist) return null;
     record.lastFishAt = now;
     const fishCaught = Math.min(record.snapshot.fishCaught + 1, MAX_FISH_CAUGHT);
+    record.snapshot = { ...record.snapshot, fishCaught };
+    return fishCaught;
+  }
+
+  /** Posição atual do jogador (usada pelos animais que o seguem), ou null se ele saiu. */
+  positionOf(id: string): Vec3 | null {
+    return this.players.get(id)?.snapshot.position ?? null;
+  }
+
+  /**
+   * O jogador quer dar um peixe a um animal em `target`. Só vale se ele tiver peixe,
+   * estiver perto do animal e respeitar o intervalo. Retorna a nova contagem ou null se recusado.
+   */
+  giveFish(id: string, target: { x: number; z: number }): number | null {
+    const record = this.players.get(id);
+    if (!record || record.snapshot.fishCaught <= 0) return null;
+    const now = Date.now();
+    if (now - record.lastFeedAt < FEED_COOLDOWN_MS) return null;
+    if (distanceXZ(record.snapshot.position, target) > FEED_RANGE + FEED_DISTANCE_SLACK) return null;
+    record.lastFeedAt = now;
+    const fishCaught = record.snapshot.fishCaught - 1;
     record.snapshot = { ...record.snapshot, fishCaught };
     return fishCaught;
   }

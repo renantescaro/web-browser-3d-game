@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import { PHYSICS_HZ, REACTIONS, TICK_RATE } from "@jogo/shared/constants";
 import type {
+  AnimalFedMessage,
   FishCountMessage,
   HitMessage,
   JoinMessage,
@@ -20,7 +21,7 @@ import { ACTION_LABELS, FishingController, type FishingDebugInfo } from "./Fishi
 import { Input } from "./Input";
 import type { Music } from "./Music";
 import { Physics } from "./Physics";
-import { AnimalsManager } from "./AnimalsManager";
+import { AnimalsManager, type AnimalDebugInfo } from "./AnimalsManager";
 import { RemotePlayers } from "./RemotePlayers";
 import { SquareManager, type SquareDebugInfo } from "./SquareManager";
 import { ThirdPersonCamera } from "./ThirdPersonCamera";
@@ -43,6 +44,7 @@ export interface DebugApi {
   trees: () => { type: string; x: number; z: number; scale: number }[];
   square: () => SquareDebugInfo | null;
   fishing: () => FishingDebugInfo;
+  animals: () => AnimalDebugInfo[];
 }
 
 declare global {
@@ -115,7 +117,15 @@ export class Game {
     this.touch = touchMode ? new TouchControls(container, canvas) : null;
     this.input = new Input(canvas, this.touch);
 
-    this.fishing = new FishingController(container, touchMode, this.local, this.squareManager, network);
+    this.fishing = new FishingController(
+      container,
+      touchMode,
+      this.local,
+      this.squareManager,
+      network,
+      this.animalsManager,
+      () => this.selfId,
+    );
     this.fishing.onActionLabel = (label) => {
       this.hud.setAction(label);
       this.touch?.setActionLabel(label);
@@ -143,6 +153,7 @@ export class Game {
     s.on("lobby", this.onLobby);
     s.on("reaction", this.onReaction);
     s.on("fishCount", this.onFishCount);
+    s.on("animalFed", this.onAnimalFed);
     s.on("disconnect", this.onDisconnect);
   }
 
@@ -157,6 +168,7 @@ export class Game {
     s.off("lobby", this.onLobby);
     s.off("reaction", this.onReaction);
     s.off("fishCount", this.onFishCount);
+    s.off("animalFed", this.onAnimalFed);
     s.off("disconnect", this.onDisconnect);
   }
 
@@ -185,6 +197,7 @@ export class Game {
     this.animalsManager.applySnapshot(msg.animals);
   };
   private readonly onFishCount = ({ count }: FishCountMessage): void => this.fishing.setCount(count);
+  private readonly onAnimalFed = ({ animalId }: AnimalFedMessage): void => this.animalsManager.playHeart(animalId);
   private readonly onLobby = (msg: LobbyMessage): void => this.hud.setOnline(msg.playerCount);
   private readonly onDisconnect = (): void => this.hud.setConnected(false);
 
@@ -271,6 +284,7 @@ export class Game {
       trees: () => this.treesManager.debugInfo(),
       square: () => this.squareManager.debugInfo(),
       fishing: () => this.fishing.debugInfo(),
+      animals: () => this.animalsManager.debugInfo(),
     };
   }
 

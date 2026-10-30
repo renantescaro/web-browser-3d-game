@@ -1,5 +1,12 @@
 import type { AnimalData, AnimalSnapshot, AnimalType } from "@jogo/shared/protocol";
-import { ANIMAL_COLORS_HORSE, ANIMAL_COLORS_SMALL, WORLD_HALF } from "@jogo/shared/constants";
+import {
+  ANIMAL_COLORS_HORSE,
+  ANIMAL_COLORS_SMALL,
+  ANIMAL_FOLLOW_CATCH_UP,
+  ANIMAL_FOLLOW_DISTANCE,
+  ANIMAL_FOLLOW_MAX_SPEED,
+  WORLD_HALF,
+} from "@jogo/shared/constants";
 import { wrapAngle } from "@jogo/shared/math";
 
 const ANIMAL_SPEED: Record<AnimalType, number> = { dog: 1.8, cat: 1.5, horse: 2.6 };
@@ -14,7 +21,7 @@ function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]!;
 }
 
-/** Agente de animal: mantém estado móvel e encapsula a IA de deambulação. */
+/** Agente de animal: mantém estado móvel e encapsula a IA (passear ou seguir um jogador). */
 export class AnimalAgent {
   readonly id: string;
   readonly type: AnimalType;
@@ -22,6 +29,8 @@ export class AnimalAgent {
   x: number;
   z: number;
   rotationY: number;
+  /** Jogador que o animal segue depois de ganhar peixe. */
+  followingId: string | null = null;
   private readonly speed: number;
   private targetAngle: number;
   private turnTimer: number;
@@ -38,7 +47,32 @@ export class AnimalAgent {
     this.turnTimer = rand(1, 4);
   }
 
-  update(dt: number): void {
+  /** `leader` é a posição do jogador seguido; null se ele saiu (aí volta a passear). */
+  update(dt: number, leader: { x: number; z: number } | null): void {
+    if (!leader) {
+      this.followingId = null;
+      this.wander(dt);
+    } else {
+      this.follow(dt, leader);
+    }
+  }
+
+  /** Vai atrás do jogador, mais rápido quanto mais longe estiver, e espera parado quando perto. */
+  private follow(dt: number, leader: { x: number; z: number }): void {
+    const dx = leader.x - this.x;
+    const dz = leader.z - this.z;
+    const gap = Math.hypot(dx, dz) - ANIMAL_FOLLOW_DISTANCE;
+    if (gap <= 0) return;
+    const dist = gap + ANIMAL_FOLLOW_DISTANCE;
+    this.targetAngle = Math.atan2(dx, dz);
+    this.rotationY += wrapAngle(this.targetAngle - this.rotationY) * Math.min(1, dt * 6);
+    const speed = Math.min(ANIMAL_FOLLOW_MAX_SPEED, this.speed + gap * ANIMAL_FOLLOW_CATCH_UP);
+    const step = Math.min(gap, speed * dt);
+    this.x += (dx / dist) * step;
+    this.z += (dz / dist) * step;
+  }
+
+  private wander(dt: number): void {
     // Muda de direção aleatoriamente
     this.turnTimer -= dt;
     if (this.turnTimer <= 0) {
@@ -66,7 +100,7 @@ export class AnimalAgent {
   }
 
   snapshot(): AnimalSnapshot {
-    return { id: this.id, position: { x: this.x, y: 0, z: this.z }, rotationY: this.rotationY };
+    return { id: this.id, position: { x: this.x, y: 0, z: this.z }, rotationY: this.rotationY, followingId: this.followingId };
   }
 }
 

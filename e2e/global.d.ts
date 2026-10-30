@@ -27,6 +27,13 @@ declare global {
         zoneEnd: number;
         speed: number;
       };
+      animals: () => {
+        id: string;
+        type: "dog" | "cat" | "horse";
+        x: number;
+        z: number;
+        followingId: string | null;
+      }[];
     };
   }
 }

@@ -5,12 +5,12 @@ import { dirname, extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Server } from "socket.io";
 import { SERVER_PORT, SQUARE_RADIUS, SQUARE_TREE_CLEARANCE, TICK_RATE } from "@jogo/shared/constants";
-import type { ClientToServerEvents, ReactionId, ServerToClientEvents } from "@jogo/shared/protocol";
+import { FISH_EATING_ANIMALS, type ClientToServerEvents, type ReactionId, type ServerToClientEvents } from "@jogo/shared/protocol";
 import { Room } from "./Room.js";
 import { generateAnimals } from "./Animals.js";
 import { generateSquare } from "./Square.js";
 import { generateTrees } from "./Trees.js";
-import { parseJoin, parseState, RateLimiter } from "./validation.js";
+import { parseFeedAnimal, parseJoin, parseState, RateLimiter } from "./validation.js";
 
 const port = Number(process.env.PORT) || SERVER_PORT;
 const clientDist = normalize(join(dirname(fileURLToPath(import.meta.url)), "../../client/dist"));
@@ -72,6 +72,7 @@ io.on("connection", (socket) => {
   const punchLimiter = new RateLimiter(5, 5);
   const reactionLimiter = new RateLimiter(6, 10);
   const fishLimiter = new RateLimiter(2, 3);
+  const feedLimiter = new RateLimiter(3, 3);
 
   socket.emit("lobby", lobbyMessage());
 
@@ -116,6 +117,19 @@ io.on("connection", (socket) => {
     if (count !== null) socket.emit("fishCount", { count });
   });
 
+  socket.on("feedAnimal", (raw: unknown) => {
+    if (!room.has(socket.id) || !feedLimiter.allow()) return;
+    const msg = parseFeedAnimal(raw);
+    const animal = msg && animals.find((a) => a.id === msg.animalId);
+    // Cavalos não comem peixe; quem já segue o jogador não precisa de outro.
+    if (!animal || !FISH_EATING_ANIMALS.includes(animal.type) || animal.followingId === socket.id) return;
+    const count = room.giveFish(socket.id, animal);
+    if (count === null) return;
+    animal.followingId = socket.id;
+    socket.emit("fishCount", { count });
+    io.to("game").emit("animalFed", { animalId: animal.id, playerId: socket.id });
+  });
+
   socket.on("disconnect", () => {
     const left = room.leave(socket.id);
     if (!left) return;
@@ -127,7 +141,9 @@ io.on("connection", (socket) => {
 
 const TICK_DT = 1 / TICK_RATE;
 setInterval(() => {
-  for (const agent of animals) agent.update(TICK_DT);
+  for (const agent of animals) {
+    agent.update(TICK_DT, agent.followingId ? room.positionOf(agent.followingId) : null);
+  }
   if (room.playerCount === 0) return;
   io.to("game").emit("snapshot", {
     players: room.snapshots(),
