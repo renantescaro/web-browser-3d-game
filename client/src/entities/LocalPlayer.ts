@@ -41,6 +41,8 @@ export class LocalPlayer {
   private jumpBuffer = 0;
   private punchTimer = 0;
   private lastPunchAt = -Infinity;
+  /** Parado pescando: o loop zera o movimento e a animação vira "fish". */
+  fishing = false;
 
   constructor(
     private readonly physics: Physics,
@@ -74,6 +76,11 @@ export class LocalPlayer {
     this.punchTimer = PUNCH_ANIM_MS / 1000;
     this.character.playPunch();
     return true;
+  }
+
+  /** Vira o personagem para um ponto (ex.: a fonte, ao começar a pescar). */
+  faceTowards(x: number, z: number): void {
+    this.rotationY = Math.atan2(x - this.curr.x, z - this.curr.z);
   }
 
   /** Empurrão vindo do servidor (evento `hit`). */
@@ -138,6 +145,7 @@ export class LocalPlayer {
   get anim(): AnimState {
     if (this.punchTimer > 0) return "punch";
     if (!this.grounded) return "jump";
+    if (this.fishing) return "fish";
     if (this.moveDir.lengthSq() < 0.0001) return "idle";
     return this.running ? "run" : "walk";
   }

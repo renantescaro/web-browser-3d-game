@@ -17,23 +17,31 @@ function rand(min: number, max: number): number {
   return Math.random() * (max - min) + min;
 }
 
-/** Ponto livre: fora da área de nascimento e longe das outras árvores. */
-function findSpot(placed: TreeData[]): { x: number; z: number } | null {
+/** Área circular onde não pode nascer árvore (ex.: a praça). */
+export interface BlockedArea {
+  x: number;
+  z: number;
+  radius: number;
+}
+
+/** Ponto livre: fora da área de nascimento, das áreas bloqueadas e longe das outras árvores. */
+function findSpot(placed: TreeData[], blocked: BlockedArea[]): { x: number; z: number } | null {
   const limit = WORLD_HALF - TREE_EDGE_MARGIN;
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     const x = rand(-limit, limit);
     const z = rand(-limit, limit);
     if (Math.hypot(x, z) < TREE_SPAWN_CLEAR_RADIUS) continue;
+    if (blocked.some((b) => Math.hypot(b.x - x, b.z - z) < b.radius)) continue;
     const tooClose = placed.some((t) => Math.hypot(t.position.x - x, t.position.z - z) < TREE_MIN_SPACING);
     if (!tooClose) return { x, z };
   }
   return null;
 }
 
-export function generateTrees(): TreeData[] {
+export function generateTrees(blocked: BlockedArea[] = []): TreeData[] {
   const trees: TreeData[] = [];
   for (let i = 0; i < TREE_COUNT; i++) {
-    const spot = findSpot(trees);
+    const spot = findSpot(trees, blocked);
     if (!spot) break;
     trees.push({
       id: `tree-${i}`,

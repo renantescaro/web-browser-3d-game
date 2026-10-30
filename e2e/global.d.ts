@@ -9,6 +9,24 @@ declare global {
       remotes: () => { id: string; name: string; x: number; y: number; z: number }[];
       lookAt: (x: number, z: number) => void;
       trees: () => { type: string; x: number; z: number; scale: number }[];
+      square: () => {
+        x: number;
+        z: number;
+        benches: number;
+        signText: string;
+        fountain: { x: number; z: number; innerRadius: number; outerRadius: number };
+        fish: { id: string; scale: number; x: number; z: number }[];
+      } | null;
+      fishing: () => {
+        active: boolean;
+        label: string;
+        count: number;
+        phase: "playing" | "caught" | "missed" | null;
+        marker: number;
+        zoneStart: number;
+        zoneEnd: number;
+        speed: number;
+      };
     };
   }
 }

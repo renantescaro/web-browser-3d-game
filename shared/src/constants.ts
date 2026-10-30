@@ -110,3 +110,55 @@ export const TREE_EDGE_MARGIN = 10;
 export const REACTIONS = ["😊", "😢", "😠", "💡"] as const;
 /** Duração total da animação de reação, em ms. */
 export const REACTION_DURATION_MS = 2500;
+
+// --- Praça da Cidade ---
+/** Raio do piso de pedra da praça (m). */
+export const SQUARE_RADIUS = 11;
+/** Faixa de distância do centro do mapa (onde os jogadores nascem) até o centro da praça (m). */
+export const SQUARE_MIN_DISTANCE = 30;
+export const SQUARE_MAX_DISTANCE = 45;
+/** Folga extra ao redor da praça onde não nascem árvores (m). */
+export const SQUARE_TREE_CLEARANCE = 3;
+export const SQUARE_SIGN_TEXT = "Praça da Cidade";
+/** Quantidade de bancos sorteada entre estes valores (inclusive). */
+export const SQUARE_MIN_BENCHES = 2;
+export const SQUARE_MAX_BENCHES = 5;
+/** Distância do centro da praça até os bancos (m). */
+export const SQUARE_BENCH_RING = 6.5;
+
+// --- Fonte e peixes ---
+/** Raio externo da borda da fonte (m). */
+export const FOUNTAIN_RADIUS = 2.6;
+export const FOUNTAIN_WALL_HEIGHT = 0.6;
+export const FOUNTAIN_WALL_THICKNESS = 0.3;
+/** Raio da coluna central da fonte (m). */
+export const FOUNTAIN_PILLAR_RADIUS = 0.35;
+/** Quantidade de peixes sorteada entre estes valores (inclusive). */
+export const FOUNTAIN_MIN_FISH = 2;
+export const FOUNTAIN_MAX_FISH = 5;
+/** Faixa do tamanho de cada peixe (1 = ~30 cm). Cada peixe recebe um valor diferente. */
+export const FISH_MIN_SCALE = 0.6;
+export const FISH_MAX_SCALE = 1.5;
+/** Velocidade de nado (m/s). */
+export const FISH_SPEED = 0.5;
+export const FISH_COLORS = ["#ff7b25", "#ffd23f", "#f25c54", "#f5f5f5", "#e8a33d"] as const;
+
+// --- Pesca (botão de Ação na fonte) ---
+/** Distância máxima (m) do jogador até a borda da fonte para poder pescar. */
+export const FISHING_REACH = 1.2;
+/** Abertura total (graus) do cone em que o jogador precisa estar olhando para a fonte. */
+export const FISHING_FACING_DEG = 100;
+/** Intervalo mínimo entre dois peixes pescados, conferido no servidor (ms). */
+export const FISH_CATCH_COOLDOWN_MS = 800;
+/** Limite do contador (protege o `join` de valores absurdos). */
+export const MAX_FISH_CAUGHT = 99_999;
+/** Pausa entre uma rodada do minigame e a próxima, mostrando o resultado (ms). */
+export const FISHING_ROUND_PAUSE_MS = 1200;
+/** Velocidade do marcador (larguras da barra por segundo): base, ganho por peixe e máximo. */
+export const FISHING_SPEED_BASE = 0.55;
+export const FISHING_SPEED_PER_FISH = 0.08;
+export const FISHING_SPEED_MAX = 2.4;
+/** Largura da área certa (fração da barra): base, quanto encolhe por peixe e mínimo. */
+export const FISHING_ZONE_BASE = 0.3;
+export const FISHING_ZONE_SHRINK_PER_FISH = 0.015;
+export const FISHING_ZONE_MIN = 0.07;

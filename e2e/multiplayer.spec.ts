@@ -1,9 +1,17 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { io, type Socket } from "socket.io-client";
 import {
+  FISH_MAX_SCALE,
+  FISH_MIN_SCALE,
+  FOUNTAIN_MAX_FISH,
+  FOUNTAIN_MIN_FISH,
   MAX_PLAYERS,
   PLAYER_COLORS,
   SERVER_PORT,
+  SQUARE_MAX_BENCHES,
+  SQUARE_MIN_BENCHES,
+  SQUARE_RADIUS,
+  SQUARE_SIGN_TEXT,
   TREE_COUNT,
   TREE_MAX_SCALE,
   TREE_MIN_SCALE,
@@ -59,6 +67,25 @@ async function remoteNames(page: Page): Promise<string[]> {
   return page.evaluate(() => (window.__jogo?.remotes() ?? []).map((r) => r.name).sort());
 }
 
+/** Segura W (girando a câmera para o alvo a cada frame) até chegar a `within` metros de (x, z). */
+async function walkTo(page: Page, x: number, z: number, within: number): Promise<void> {
+  await page.keyboard.down("ShiftLeft");
+  await page.keyboard.down("KeyW");
+  await page.waitForFunction(
+    ([tx, tz, d]) => {
+      const api = window.__jogo;
+      if (!api) return false;
+      api.lookAt(tx, tz);
+      const p = api.local();
+      return Math.hypot(p.x - tx, p.z - tz) < d;
+    },
+    [x, z, within] as const,
+    { timeout: 20_000, polling: "raf" },
+  );
+  await page.keyboard.up("KeyW");
+  await page.keyboard.up("ShiftLeft");
+}
+
 async function closeAll(pages: Page[]): Promise<void> {
   await Promise.all(pages.map((p) => p.context().close()));
 }
@@ -90,6 +117,113 @@ test("todos veem as mesmas árvores, dentro do mapa e com tamanho limitado", asy
   }
   expect(await treesOf(beto)).toEqual(trees);
   await closeAll([ana, beto]);
+});
+
+test("existe uma praça com bancos, placa e fonte com peixes nadando", async ({ browser }) => {
+  const ana = await joinAs(browser, "Ana", 0);
+  const beto = await joinAs(browser, "Beto", 1);
+  const squareOf = (page: Page) => page.evaluate(() => window.__jogo?.square() ?? null);
+
+  const square = await squareOf(ana);
+  expect(square).not.toBeNull();
+  if (!square) return;
+  expect(square.signText).toBe(SQUARE_SIGN_TEXT);
+  expect(square.benches).toBeGreaterThanOrEqual(SQUARE_MIN_BENCHES);
+  expect(square.benches).toBeLessThanOrEqual(SQUARE_MAX_BENCHES);
+  expect(square.fish.length).toBeGreaterThanOrEqual(FOUNTAIN_MIN_FISH);
+  expect(square.fish.length).toBeLessThanOrEqual(FOUNTAIN_MAX_FISH);
+
+  // Cada peixe tem um tamanho diferente, dentro da faixa.
+  const scales = square.fish.map((f) => f.scale);
+  expect(new Set(scales).size).toBe(scales.length);
+  for (const s of scales) {
+    expect(s).toBeGreaterThanOrEqual(FISH_MIN_SCALE);
+    expect(s).toBeLessThanOrEqual(FISH_MAX_SCALE);
+  }
+
+  // A mesma praça para todos (os peixes nadam localmente, então só o layout é comparado).
+  const layout = (s: typeof square) => ({ x: s.x, z: s.z, benches: s.benches, fish: s.fish.map((f) => f.scale) });
+  const betoSquare = await squareOf(beto);
+  expect(betoSquare && layout(betoSquare)).toEqual(layout(square));
+
+  // Os peixes se movem e não saem da água.
+  await expect
+    .poll(async () => {
+      const later = await squareOf(ana);
+      return later?.fish.some((f, i) => {
+        const before = square.fish[i];
+        return before !== undefined && Math.hypot(f.x - before.x, f.z - before.z) > 0.1;
+      });
+    })
+    .toBe(true);
+  const later = await squareOf(ana);
+  for (const f of later?.fish ?? []) {
+    const r = Math.hypot(f.x, f.z);
+    expect(r).toBeGreaterThanOrEqual(square.fountain.innerRadius - 1e-6);
+    expect(r).toBeLessThanOrEqual(square.fountain.outerRadius + 1e-6);
+  }
+
+  // Nenhuma árvore nasce em cima da praça.
+  const trees = await ana.evaluate(() => window.__jogo?.trees() ?? []);
+  for (const t of trees) expect(Math.hypot(t.x - square.x, t.z - square.z)).toBeGreaterThan(SQUARE_RADIUS);
+  await closeAll([ana, beto]);
+});
+
+test("pesca na fonte: botão de Ação vira Pescar, minigame fica mais difícil e o contador persiste", async ({
+  browser,
+}) => {
+  const page = await joinAs(browser, "Pescador", 3);
+  const fishing = () => page.evaluate(() => window.__jogo!.fishing());
+  const action = page.getByTestId("action-label");
+  const panel = page.getByTestId("fishing-panel");
+  await expect(action).toContainText("Bater");
+  await expect(page.getByTestId("fish-count")).toHaveText("🐟 0");
+
+  // Contorna a placa (que fica entre o centro do mapa e a fonte) e chega na borda da fonte.
+  const square = await page.evaluate(() => window.__jogo!.square()!);
+  const { x: fx, z: fz } = square.fountain;
+  const d = Math.hypot(fx, fz);
+  await walkTo(page, fx + (-fz / d) * 4, fz + (fx / d) * 4, 1);
+  await walkTo(page, fx, fz, 3.3);
+  await expect(action).toContainText("Pescar");
+
+  // Ação na frente da fonte: abre o minigame com a vara na mão (sem soco).
+  await page.keyboard.press("KeyF");
+  await expect(panel).toBeVisible();
+  await expect(action).toContainText("Fisgar");
+  await expect.poll(async () => (await page.evaluate(() => window.__jogo!.local())).anim).toBe("fish");
+  const firstSpeed = (await fishing()).speed;
+
+  // Aperta quando o marcador estiver dentro da área certa (tenta algumas rodadas).
+  for (let attempt = 0; attempt < 5 && (await fishing()).count === 0; attempt++) {
+    await page.waitForFunction(
+      () => {
+        const f = window.__jogo!.fishing();
+        const margin = (f.zoneEnd - f.zoneStart) * 0.25;
+        return f.phase === "playing" && f.marker > f.zoneStart + margin && f.marker < f.zoneEnd - margin;
+      },
+      undefined,
+      { timeout: 10_000, polling: "raf" },
+    );
+    await page.keyboard.press("KeyF");
+    await expect.poll(async () => (await fishing()).phase).not.toBe("playing");
+    await page.waitForTimeout(300);
+  }
+  await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
+
+  // A próxima rodada é mais difícil.
+  await expect.poll(async () => (await fishing()).phase, { timeout: 5_000 }).toBe("playing");
+  expect((await fishing()).speed).toBeGreaterThan(firstSpeed);
+
+  // Sai do minigame e anda pela praça: a contagem continua na tela.
+  await page.keyboard.press("KeyQ");
+  await expect(panel).toBeHidden();
+  await page.keyboard.down("KeyS");
+  await page.waitForTimeout(1200);
+  await page.keyboard.up("KeyS");
+  await expect(action).toContainText("Bater");
+  await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
+  await closeAll([page]);
 });
 
 test("vê outro jogador se movendo", async ({ browser }) => {
@@ -236,7 +370,8 @@ test("no celular mostra controles de toque e o analógico move", async ({ browse
   const after = await page.evaluate(() => window.__jogo?.local());
   expect(after && before ? Math.hypot(after.x - before.x, after.z - before.z) : 0).toBeGreaterThan(0.5);
 
-  await page.getByTestId("touch-punch").tap();
+  await expect(page.getByTestId("touch-action")).toHaveText("Bater");
+  await page.getByTestId("touch-action").tap();
   await expect.poll(async () => (await page.evaluate(() => window.__jogo?.local()))?.anim).toBe("punch");
 
   await context.close();

@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { PUNCH_ANIM_MS, REACTION_DURATION_MS, RUN_SPEED, WALK_SPEED } from "@jogo/shared/constants";
 import type { AnimState } from "@jogo/shared/protocol";
+import { FishingRod } from "./FishingRod";
 
 const SKIN_COLOR = 0xe0b48f;
 const EYE_COLOR = 0x1d2733;
@@ -18,6 +19,9 @@ const HIP_Y = 0.9;
 const SHOULDER_Y = 1.44;
 const LEG = { radius: 0.1, length: 0.7, x: 0.12 };
 const ARM = { radius: 0.075, length: 0.48, x: 0.32 };
+/** Pescando: inclinação do braço direito (para a frente) e da vara em relação à vertical. */
+const FISH_ARM_X = -1.1;
+const ROD_FROM_UP = 1.05;
 
 /** Variação da animação conforme a ação. */
 interface Pose {
@@ -38,6 +42,7 @@ export class Character {
   private readonly rightArm = new THREE.Group();
   private readonly leftLeg = new THREE.Group();
   private readonly rightLeg = new THREE.Group();
+  private readonly rod = new FishingRod();
   private readonly materials: THREE.MeshStandardMaterial[] = [];
   private readonly geometries: THREE.BufferGeometry[] = [];
   private readonly label: CSS2DObject;
@@ -80,6 +85,11 @@ export class Character {
     this.limb(this.leftArm, armGeo, limbMat, ARM.x, SHOULDER_Y, ARM.length / 2 + ARM.radius - 0.02);
     this.limb(this.rightLeg, legGeo, limbMat, -LEG.x, HIP_Y, LEG.length / 2 + LEG.radius);
     this.limb(this.leftLeg, legGeo, limbMat, LEG.x, HIP_Y, LEG.length / 2 + LEG.radius);
+
+    // Vara de pescar na mão direita (só aparece pescando).
+    this.rod.root.position.y = -(ARM.length + ARM.radius);
+    this.rod.root.rotation.x = ROD_FROM_UP - FISH_ARM_X;
+    this.rightArm.add(this.rod.root);
 
     // Nome flutuando acima da cabeça
     const el = document.createElement("div");
@@ -151,6 +161,7 @@ export class Character {
     this.time += dt;
     const k = 1 - Math.exp(-14 * dt);
     const airborne = anim === "jump";
+    const fishing = anim === "fish";
     const moving = !airborne && speed > 0.3;
 
     // Ciclo de passos: frequência proporcional à velocidade.
@@ -162,7 +173,9 @@ export class Character {
 
     const pose: Pose = airborne
       ? { legL: -0.55, legR: -0.2, armL: -0.3, armR: -0.3, spread: 0.45 }
-      : { legL: s, legR: -s, armL: -s * 0.8, armR: s * 0.8, spread: 0.06 };
+      : fishing
+        ? { legL: 0, legR: 0, armL: -0.7, armR: FISH_ARM_X, spread: 0.08 }
+        : { legL: s, legR: -s, armL: -s * 0.8, armR: s * 0.8, spread: 0.06 };
 
     this.leftLeg.rotation.x += (pose.legL - this.leftLeg.rotation.x) * k;
     this.rightLeg.rotation.x += (pose.legR - this.rightLeg.rotation.x) * k;
@@ -178,6 +191,15 @@ export class Character {
 
     this.updatePunch(dt);
     this.updateHit(dt);
+    this.updateRod(dt, fishing);
+  }
+
+  /** Mostra a vara pescando e mantém a linha pendendo na vertical. */
+  private updateRod(dt: number, fishing: boolean): void {
+    this.rod.root.visible = fishing;
+    if (!fishing) return;
+    this.rod.setLineAngle(-(this.rod.root.rotation.x + this.rightArm.rotation.x + this.body.rotation.x));
+    this.rod.update(dt);
   }
 
   private updatePunch(dt: number): void {
@@ -218,6 +240,7 @@ export class Character {
     this.label.element.remove();
     this.reactionLabel.removeFromParent();
     this.reactionLabel.element.remove();
+    this.rod.dispose();
     for (const g of this.geometries) g.dispose();
     for (const m of this.materials) m.dispose();
   }

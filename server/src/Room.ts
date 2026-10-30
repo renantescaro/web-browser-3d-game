@@ -1,6 +1,10 @@
 // Estado da sala: entrada/saída, limite de jogadores, cores únicas, estados e socos.
 import {
+  FISH_CATCH_COOLDOWN_MS,
+  FISHING_REACH,
+  FOUNTAIN_RADIUS,
   KNOCKBACK_HORIZONTAL,
+  MAX_FISH_CAUGHT,
   KNOCKBACK_UP,
   MAX_PLAUSIBLE_SPEED,
   MAX_PLAYERS,
@@ -11,14 +15,18 @@ import {
   SPAWN_RADIUS,
 } from "@jogo/shared/constants";
 import type { HitMessage, JoinRejectReason, PlayerSnapshot, StateMessage, Vec3 } from "@jogo/shared/protocol";
-import { forwardFromYaw } from "@jogo/shared/math";
+import { distanceXZ, forwardFromYaw } from "@jogo/shared/math";
 import { clampToWorld, isValidColor, sanitizeName } from "./validation.js";
 
 interface PlayerRecord {
   snapshot: PlayerSnapshot;
   lastStateAt: number;
   lastPunchAt: number;
+  lastFishAt: number;
 }
+
+/** Folga (m) na distância até a fonte, pela latência entre o cliente e o último `state`. */
+const FISHING_DISTANCE_SLACK = 1.5;
 
 export type JoinResult = { ok: true; player: PlayerSnapshot } | { ok: false; reason: JoinRejectReason };
 
@@ -41,7 +49,7 @@ export class Room {
     return [...this.players.values()].map((p) => p.snapshot);
   }
 
-  join(id: string, rawName: unknown, rawColor: unknown): JoinResult {
+  join(id: string, rawName: unknown, rawColor: unknown, fishCaught = 0): JoinResult {
     if (this.players.size >= MAX_PLAYERS) return { ok: false, reason: "full" };
     const name = sanitizeName(rawName);
     if (!name) return { ok: false, reason: "invalidName" };
@@ -55,8 +63,9 @@ export class Room {
       rotationY: Math.random() * Math.PI * 2,
       velocity: { x: 0, y: 0, z: 0 },
       anim: "idle",
+      fishCaught,
     };
-    this.players.set(id, { snapshot, lastStateAt: Date.now(), lastPunchAt: 0 });
+    this.players.set(id, { snapshot, lastStateAt: Date.now(), lastPunchAt: 0, lastFishAt: 0 });
     return { ok: true, player: snapshot };
   }
 
@@ -137,6 +146,23 @@ export class Room {
       z: best.dir.z * KNOCKBACK_HORIZONTAL,
     };
     return { attackerId, targetId: best.id, knockback };
+  }
+
+  /**
+   * O cliente diz que pescou um peixe. Só conta se o jogador estiver junto à fonte
+   * e respeitar o intervalo mínimo. Retorna a nova contagem ou null se recusado.
+   */
+  catchFish(id: string, fountain: Vec3): number | null {
+    const record = this.players.get(id);
+    if (!record) return null;
+    const now = Date.now();
+    if (now - record.lastFishAt < FISH_CATCH_COOLDOWN_MS) return null;
+    const maxDist = FOUNTAIN_RADIUS + FISHING_REACH + FISHING_DISTANCE_SLACK;
+    if (distanceXZ(record.snapshot.position, fountain) > maxDist) return null;
+    record.lastFishAt = now;
+    const fishCaught = Math.min(record.snapshot.fishCaught + 1, MAX_FISH_CAUGHT);
+    record.snapshot = { ...record.snapshot, fishCaught };
+    return fishCaught;
   }
 
   /** Escolhe um ponto de nascimento longe dos outros jogadores. */

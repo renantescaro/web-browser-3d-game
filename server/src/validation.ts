@@ -1,5 +1,5 @@
 // Validação e sanitização de tudo que chega do cliente. Nunca confie no cliente.
-import { MAX_HEIGHT, NAME_MAX_LENGTH, NAME_MIN_LENGTH, PLAYER_COLORS, PLAYER_RADIUS, WORLD_HALF } from "@jogo/shared/constants";
+import { MAX_FISH_CAUGHT, MAX_HEIGHT, NAME_MAX_LENGTH, NAME_MIN_LENGTH, PLAYER_COLORS, PLAYER_RADIUS, WORLD_HALF } from "@jogo/shared/constants";
 import { ANIM_STATES, type AnimState, type StateMessage, type Vec3 } from "@jogo/shared/protocol";
 import { clamp } from "@jogo/shared/math";
 
@@ -29,9 +29,15 @@ export function isValidColor(value: unknown): value is string {
 }
 
 /** Valida o formato do `join`. Nome e cor são verificados na sala (para dar o motivo certo). */
-export function parseJoin(value: unknown): { name: unknown; color: unknown } | null {
+export function parseJoin(value: unknown): { name: unknown; color: unknown; fishCaught: number } | null {
   if (!isRecord(value)) return null;
-  return { name: value.name, color: value.color };
+  return { name: value.name, color: value.color, fishCaught: parseFishCount(value.fishCaught) };
+}
+
+/** Contagem de peixes vinda do cliente ao reconectar: inteiro entre 0 e `MAX_FISH_CAUGHT`; senão 0. */
+export function parseFishCount(value: unknown): number {
+  if (!isFiniteNumber(value) || !Number.isInteger(value)) return 0;
+  return clamp(value, 0, MAX_FISH_CAUGHT);
 }
 
 function parseVec3(value: unknown): Vec3 | null {

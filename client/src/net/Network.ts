@@ -30,6 +30,16 @@ export class Network {
     this.session = msg;
   }
 
+  /** Atualiza a contagem de peixes da sessão, reenviada no `join` ao reconectar. */
+  rememberFishCaught(count: number): void {
+    if (this.session) this.session = { ...this.session, fishCaught: count };
+  }
+
+  /** Avisa que acertou o minigame de pesca; o servidor confere e responde com `fishCount`. */
+  catchFish(): void {
+    if (this.socket.connected) this.socket.emit("fishCaught", {});
+  }
+
   sendState(state: StateMessage): void {
     if (this.socket.connected) this.socket.volatile.emit("state", state);
   }

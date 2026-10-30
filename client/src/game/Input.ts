@@ -8,7 +8,10 @@ export interface Intents {
   moveZ: number;
   run: boolean;
   jump: boolean;
-  punch: boolean;
+  /** Botão de Ação (F/clique): bate, ou pesca/fisga na fonte, conforme o contexto. */
+  action: boolean;
+  /** Sair do que estiver fazendo (Esc/Q), ex.: o minigame de pesca. */
+  cancel: boolean;
   /** Liga/desliga a música (tecla M). */
   toggleMusic: boolean;
   /** Índice da reação (0–3) ou null se nenhuma. Teclas 1–4. */
@@ -20,7 +23,8 @@ export interface Intents {
 export class Input {
   private readonly keys = new Set<string>();
   private jumpQueued = false;
-  private punchQueued = false;
+  private actionQueued = false;
+  private cancelQueued = false;
   private musicQueued = false;
   private reactionQueued: number | null = null;
   private lookDX = 0;
@@ -52,7 +56,8 @@ export class Input {
       moveZ: (k.has("KeyW") ? 1 : 0) - (k.has("KeyS") ? 1 : 0),
       run: k.has("ShiftLeft") || k.has("ShiftRight"),
       jump: this.jumpQueued,
-      punch: this.punchQueued,
+      action: this.actionQueued,
+      cancel: this.cancelQueued,
       toggleMusic: this.musicQueued,
       reaction: this.reactionQueued,
       lookDX: this.lookDX,
@@ -66,13 +71,14 @@ export class Input {
         intents.run ||= t.run;
       }
       intents.jump ||= t.jump;
-      intents.punch ||= t.punch;
+      intents.action ||= t.action;
       if (intents.reaction === null) intents.reaction = t.reaction;
       intents.lookDX += t.lookDX;
       intents.lookDY += t.lookDY;
     }
     this.jumpQueued = false;
-    this.punchQueued = false;
+    this.actionQueued = false;
+    this.cancelQueued = false;
     this.musicQueued = false;
     this.reactionQueued = null;
     this.lookDX = 0;
@@ -86,7 +92,8 @@ export class Input {
       e.preventDefault();
       if (!e.repeat) this.jumpQueued = true;
     }
-    if (e.code === "KeyF" && !e.repeat) this.punchQueued = true;
+    if (e.code === "KeyF" && !e.repeat) this.actionQueued = true;
+    if ((e.code === "Escape" || e.code === "KeyQ") && !e.repeat) this.cancelQueued = true;
     if (e.code === "KeyM" && !e.repeat) this.musicQueued = true;
     const reactionIndex = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 }[e.code];
     if (reactionIndex !== undefined && !e.repeat) this.reactionQueued = reactionIndex;
@@ -105,7 +112,7 @@ export class Input {
   private readonly onMouseDown = (e: MouseEvent): void => {
     if (e.button !== 0 || this.touch) return;
     if (this.pointerLocked) {
-      this.punchQueued = true;
+      this.actionQueued = true;
       return;
     }
     try {
@@ -123,6 +130,8 @@ export class Input {
   };
 
   private readonly onLockChange = (): void => {
+    // Com o mouse preso o navegador consome o Esc; soltar o mouse também conta como "sair".
+    if (!this.pointerLocked) this.cancelQueued = true;
     this.onPointerLockChange?.(this.pointerLocked);
   };
 

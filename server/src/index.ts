@@ -4,10 +4,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { dirname, extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Server } from "socket.io";
-import { SERVER_PORT, TICK_RATE } from "@jogo/shared/constants";
+import { SERVER_PORT, SQUARE_RADIUS, SQUARE_TREE_CLEARANCE, TICK_RATE } from "@jogo/shared/constants";
 import type { ClientToServerEvents, ReactionId, ServerToClientEvents } from "@jogo/shared/protocol";
 import { Room } from "./Room.js";
 import { generateAnimals } from "./Animals.js";
+import { generateSquare } from "./Square.js";
 import { generateTrees } from "./Trees.js";
 import { parseJoin, parseState, RateLimiter } from "./validation.js";
 
@@ -49,7 +50,15 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 });
 const room = new Room();
 const animals = generateAnimals();
-const trees = generateTrees();
+// A praça é gerada antes das árvores para que elas não nasçam em cima dela.
+const square = generateSquare();
+const trees = generateTrees([
+  { x: square.position.x, z: square.position.z, radius: SQUARE_RADIUS + SQUARE_TREE_CLEARANCE },
+]);
+console.log(
+  `[servidor] praça gerada em (${square.position.x.toFixed(0)}, ${square.position.z.toFixed(0)}): ` +
+    `${square.benches.length} bancos, ${square.fountain.fish.length} peixes`,
+);
 console.log(`[servidor] ${trees.length} árvores geradas`);
 console.log(`[servidor] ${animals.length} animais gerados (${animals.filter(a => a.type === "dog").length} cão, ${animals.filter(a => a.type === "cat").length} gato, ${animals.filter(a => a.type === "horse").length} cavalo)`);
 
@@ -62,6 +71,7 @@ io.on("connection", (socket) => {
   const stateLimiter = new RateLimiter(30, 40);
   const punchLimiter = new RateLimiter(5, 5);
   const reactionLimiter = new RateLimiter(6, 10);
+  const fishLimiter = new RateLimiter(2, 3);
 
   socket.emit("lobby", lobbyMessage());
 
@@ -69,14 +79,14 @@ io.on("connection", (socket) => {
     if (room.has(socket.id) || !joinLimiter.allow()) return;
     const msg = parseJoin(raw);
     if (!msg) return;
-    const result = room.join(socket.id, msg.name, msg.color);
+    const result = room.join(socket.id, msg.name, msg.color, msg.fishCaught);
     if (!result.ok) {
       console.log(`[sala] entrada recusada: ${result.reason}`);
       socket.emit("joinRejected", { reason: result.reason });
       return;
     }
     socket.join("game");
-    socket.emit("welcome", { selfId: socket.id, players: room.snapshots(), animals: animals.map(a => a.toData()), trees });
+    socket.emit("welcome", { selfId: socket.id, players: room.snapshots(), animals: animals.map(a => a.toData()), trees, square });
     socket.to("game").emit("playerJoined", { player: result.player });
     io.emit("lobby", lobbyMessage());
     console.log(`[sala] + ${result.player.name} entrou (${room.playerCount} na sala)`);
@@ -98,6 +108,12 @@ io.on("connection", (socket) => {
     if (!room.has(socket.id) || !reactionLimiter.allow()) return;
     if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0 || raw > 3) return;
     io.to("game").emit("reaction", { playerId: socket.id, reactionId: raw as ReactionId });
+  });
+
+  socket.on("fishCaught", () => {
+    if (!room.has(socket.id) || !fishLimiter.allow()) return;
+    const count = room.catchFish(socket.id, square.fountain.position);
+    if (count !== null) socket.emit("fishCount", { count });
   });
 
   socket.on("disconnect", () => {

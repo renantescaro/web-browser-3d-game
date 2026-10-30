@@ -12,7 +12,7 @@ export interface TouchIntents {
   moveZ: number;
   run: boolean;
   jump: boolean;
-  punch: boolean;
+  action: boolean;
   reaction: number | null;
   lookDX: number;
   lookDY: number;
@@ -22,6 +22,7 @@ export class TouchControls {
   private readonly root = document.createElement("div");
   private readonly stick = document.createElement("div");
   private readonly knob = document.createElement("div");
+  private readonly actionButton: HTMLButtonElement;
   private stickPointer: number | null = null;
   private lookPointer: number | null = null;
   private lastLookX = 0;
@@ -29,7 +30,7 @@ export class TouchControls {
   private moveX = 0;
   private moveZ = 0;
   private jumpQueued = false;
-  private punchQueued = false;
+  private actionQueued = false;
   private reactionQueued: number | null = null;
   private lookDX = 0;
   private lookDY = 0;
@@ -45,7 +46,7 @@ export class TouchControls {
     this.stick.appendChild(this.knob);
 
     const jump = this.createButton("Pular", "touch-jump", () => (this.jumpQueued = true));
-    const punch = this.createButton("Bater", "touch-punch", () => (this.punchQueued = true));
+    this.actionButton = this.createButton("Bater", "touch-action", () => (this.actionQueued = true));
     const reactionEmojis = ["😊", "😢", "😠", "💡"] as const;
     const reactionContainer = document.createElement("div");
     reactionContainer.className = "touch-reactions";
@@ -57,7 +58,7 @@ export class TouchControls {
         }),
       );
     }
-    this.root.append(this.stick, jump, punch, reactionContainer);
+    this.root.append(this.stick, jump, this.actionButton, reactionContainer);
     container.appendChild(this.root);
 
     this.stick.addEventListener("pointerdown", this.onStickDown);
@@ -77,17 +78,22 @@ export class TouchControls {
       moveZ: this.moveZ,
       run: tilt >= TOUCH_RUN_THRESHOLD,
       jump: this.jumpQueued,
-      punch: this.punchQueued,
+      action: this.actionQueued,
       reaction: this.reactionQueued,
       lookDX: this.lookDX * TOUCH_LOOK_SCALE,
       lookDY: this.lookDY * TOUCH_LOOK_SCALE,
     };
     this.jumpQueued = false;
-    this.punchQueued = false;
+    this.actionQueued = false;
     this.reactionQueued = null;
     this.lookDX = 0;
     this.lookDY = 0;
     return intents;
+  }
+
+  /** Texto do botão de Ação conforme o contexto (Bater, Pescar, Fisgar). */
+  setActionLabel(label: string): void {
+    this.actionButton.textContent = label;
   }
 
   private createButton(label: string, className: string, onPress: () => void): HTMLButtonElement {

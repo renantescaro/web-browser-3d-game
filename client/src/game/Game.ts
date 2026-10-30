@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import { PHYSICS_HZ, REACTIONS, TICK_RATE } from "@jogo/shared/constants";
 import type {
+  FishCountMessage,
   HitMessage,
   JoinMessage,
   JoinRejectReason,
@@ -15,11 +16,13 @@ import type {
 import { LocalPlayer } from "../entities/LocalPlayer";
 import type { Network } from "../net/Network";
 import { Hud } from "../ui/Hud";
+import { ACTION_LABELS, FishingController, type FishingDebugInfo } from "./FishingController";
 import { Input } from "./Input";
 import type { Music } from "./Music";
 import { Physics } from "./Physics";
 import { AnimalsManager } from "./AnimalsManager";
 import { RemotePlayers } from "./RemotePlayers";
+import { SquareManager, type SquareDebugInfo } from "./SquareManager";
 import { ThirdPersonCamera } from "./ThirdPersonCamera";
 import { TouchControls, isTouchDevice } from "./TouchControls";
 import { TreesManager } from "./TreesManager";
@@ -38,6 +41,8 @@ export interface DebugApi {
   /** Gira a câmera para olhar um ponto (assim "W" anda até ele). */
   lookAt: (x: number, z: number) => void;
   trees: () => { type: string; x: number; z: number; scale: number }[];
+  square: () => SquareDebugInfo | null;
+  fishing: () => FishingDebugInfo;
 }
 
 declare global {
@@ -59,6 +64,9 @@ export class Game {
   private readonly remotes: RemotePlayers;
   private readonly animalsManager: AnimalsManager;
   private readonly treesManager: TreesManager;
+  private readonly squareManager: SquareManager;
+  private readonly fishing: FishingController;
+  private readonly touch: TouchControls | null;
   private readonly moveDir = new THREE.Vector3();
   private selfId: string;
   private frameId = 0;
@@ -92,6 +100,9 @@ export class Game {
     this.treesManager = new TreesManager(this.physics, this.world.scene);
     this.treesManager.load(welcome.trees);
 
+    this.squareManager = new SquareManager(this.physics, this.world.scene);
+    this.squareManager.load(welcome.square);
+
     const touchMode = isTouchDevice();
     this.hud = new Hud(container, touchMode);
     this.hud.setOnline(welcome.players.length);
@@ -101,7 +112,17 @@ export class Game {
     music.start();
 
     const canvas = this.world.renderer.domElement;
-    this.input = new Input(canvas, touchMode ? new TouchControls(container, canvas) : null);
+    this.touch = touchMode ? new TouchControls(container, canvas) : null;
+    this.input = new Input(canvas, this.touch);
+
+    this.fishing = new FishingController(container, touchMode, this.local, this.squareManager, network);
+    this.fishing.onActionLabel = (label) => {
+      this.hud.setAction(label);
+      this.touch?.setActionLabel(label);
+    };
+    this.fishing.onCount = (count) => this.hud.setFishCount(count);
+    this.fishing.setCount(self?.fishCaught ?? 0);
+    this.hud.setAction(ACTION_LABELS.punch);
     this.input.onPointerLockChange = (locked) => this.hud.setPointerLocked(locked);
 
     this.bindNetwork();
@@ -121,6 +142,7 @@ export class Game {
     s.on("hit", this.onHit);
     s.on("lobby", this.onLobby);
     s.on("reaction", this.onReaction);
+    s.on("fishCount", this.onFishCount);
     s.on("disconnect", this.onDisconnect);
   }
 
@@ -134,6 +156,7 @@ export class Game {
     s.off("hit", this.onHit);
     s.off("lobby", this.onLobby);
     s.off("reaction", this.onReaction);
+    s.off("fishCount", this.onFishCount);
     s.off("disconnect", this.onDisconnect);
   }
 
@@ -143,6 +166,10 @@ export class Game {
     this.remotes.setSelfId(msg.selfId);
     this.remotes.reset(msg.players);
     this.treesManager.load(msg.trees);
+    this.squareManager.load(msg.square);
+    this.fishing.stop();
+    const self = msg.players.find((p) => p.id === msg.selfId);
+    if (self) this.fishing.setCount(self.fishCaught);
     this.hud.setConnected(true);
     this.network.sendState(this.local.state());
   };
@@ -157,6 +184,7 @@ export class Game {
     this.remotes.applySnapshot(msg);
     this.animalsManager.applySnapshot(msg.animals);
   };
+  private readonly onFishCount = ({ count }: FishCountMessage): void => this.fishing.setCount(count);
   private readonly onLobby = (msg: LobbyMessage): void => this.hud.setOnline(msg.playerCount);
   private readonly onDisconnect = (): void => this.hud.setConnected(false);
 
@@ -178,12 +206,14 @@ export class Game {
     const dt = this.lastTime === null ? 0 : Math.min((time - this.lastTime) / 1000, 0.25);
     this.lastTime = time;
 
-    // 1) Intenções do input
+    // 1) Intenções do input. A Ação pesca na frente da fonte; senão, bate.
     const intents = this.input.consume();
     this.camera.rotate(intents.lookDX, intents.lookDY);
-    this.camera.toWorldDirection(intents.moveX, intents.moveZ, this.moveDir);
-    this.local.setInput(this.moveDir, intents.run, intents.jump);
-    if (intents.punch && this.local.tryPunch(time)) this.network.punch();
+    this.fishing.update(dt, intents);
+    if (intents.action && !this.fishing.handleAction() && this.local.tryPunch(time)) this.network.punch();
+    if (this.fishing.active) this.moveDir.set(0, 0, 0);
+    else this.camera.toWorldDirection(intents.moveX, intents.moveZ, this.moveDir);
+    this.local.setInput(this.moveDir, intents.run, intents.jump && !this.fishing.active);
     if (intents.toggleMusic) this.toggleMusic();
     if (intents.reaction !== null) {
       const emoji = REACTIONS[intents.reaction];
@@ -193,9 +223,10 @@ export class Game {
       }
     }
 
-    // 2) Remotos, animais e física em passo fixo
+    // 2) Remotos, animais, peixes e física em passo fixo
     this.remotes.update(time, dt);
     this.animalsManager.update(dt);
+    this.squareManager.update(dt);
     this.accumulator += dt;
     let steps = 0;
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
@@ -238,6 +269,8 @@ export class Game {
         this.camera.yaw = Math.atan2(x - p.x, z - p.z);
       },
       trees: () => this.treesManager.debugInfo(),
+      square: () => this.squareManager.debugInfo(),
+      fishing: () => this.fishing.debugInfo(),
     };
   }
 
@@ -245,10 +278,12 @@ export class Game {
     cancelAnimationFrame(this.frameId);
     this.music.stop();
     this.unbindNetwork();
+    this.fishing.dispose();
     this.input.dispose();
     this.remotes.clear();
     this.animalsManager.dispose();
     this.treesManager.clear();
+    this.squareManager.clear();
     this.local.dispose();
     this.physics.dispose();
     this.hud.dispose();

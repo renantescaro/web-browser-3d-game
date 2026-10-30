@@ -6,7 +6,8 @@ export interface Vec3 {
   z: number;
 }
 
-export const ANIM_STATES = ["idle", "walk", "run", "jump", "punch"] as const;
+/** "fish" = parado pescando, com a vara na mão. */
+export const ANIM_STATES = ["idle", "walk", "run", "jump", "punch", "fish"] as const;
 export type AnimState = (typeof ANIM_STATES)[number];
 
 export interface PlayerSnapshot {
@@ -18,6 +19,8 @@ export interface PlayerSnapshot {
   rotationY: number;
   velocity: Vec3;
   anim: AnimState;
+  /** Quantos peixes o jogador já pescou (atributo do jogador, guardado no servidor). */
+  fishCaught: number;
 }
 
 export type JoinRejectReason = "full" | "invalidName" | "colorTaken";
@@ -47,6 +50,45 @@ export interface TreeData {
   scale: number;
 }
 
+export interface BenchData {
+  /** Posição dos pés do banco (y = 0), no mundo. */
+  position: Vec3;
+  /** O assento olha para a fonte. */
+  rotationY: number;
+}
+
+export interface SignData {
+  position: Vec3;
+  /** A face com o texto olha para esta direção (yaw). */
+  rotationY: number;
+  text: string;
+}
+
+export interface FishData {
+  id: string;
+  color: string;
+  /** Tamanho, entre `FISH_MIN_SCALE` e `FISH_MAX_SCALE`; diferente para cada peixe. */
+  scale: number;
+  /** Posição inicial relativa ao centro da fonte (só x e z importam). */
+  position: Vec3;
+  rotationY: number;
+}
+
+export interface FountainData {
+  /** Centro da fonte, no mundo. */
+  position: Vec3;
+  fish: FishData[];
+}
+
+/** A praça da cidade: exatamente uma por servidor, gerada ao iniciar. */
+export interface SquareData {
+  /** Centro da praça, no mundo (y = 0). */
+  position: Vec3;
+  benches: BenchData[];
+  sign: SignData;
+  fountain: FountainData;
+}
+
 export type ReactionId = 0 | 1 | 2 | 3;
 
 export interface ReactionMessage {
@@ -58,6 +100,8 @@ export interface ReactionMessage {
 export interface JoinMessage {
   name: string;
   color: string;
+  /** Peixes já pescados; o cliente reenvia ao reconectar para não perder a contagem. */
+  fishCaught?: number;
 }
 
 export interface StateMessage {
@@ -68,6 +112,9 @@ export interface StateMessage {
 }
 
 export type PunchMessage = Record<string, never>;
+
+/** O cliente acertou o minigame; o servidor confere se ele está na fonte. */
+export type FishCaughtMessage = Record<string, never>;
 
 // --- Servidor → cliente ---
 export interface LobbyMessage {
@@ -80,6 +127,7 @@ export interface WelcomeMessage {
   players: PlayerSnapshot[];
   animals: AnimalData[];
   trees: TreeData[];
+  square: SquareData;
 }
 
 export interface JoinRejectedMessage {
@@ -107,6 +155,11 @@ export interface SnapshotMessage {
   t: number;
 }
 
+/** Contagem atualizada de peixes do próprio jogador. */
+export interface FishCountMessage {
+  count: number;
+}
+
 export interface HitMessage {
   attackerId: string;
   targetId: string;
@@ -119,6 +172,7 @@ export interface ClientToServerEvents {
   state: (msg: StateMessage) => void;
   punch: (msg: PunchMessage) => void;
   reaction: (reactionId: ReactionId) => void;
+  fishCaught: (msg: FishCaughtMessage) => void;
 }
 
 /** Eventos que o servidor envia (tipagem do Socket.IO). */
@@ -131,4 +185,5 @@ export interface ServerToClientEvents {
   snapshot: (msg: SnapshotMessage) => void;
   hit: (msg: HitMessage) => void;
   reaction: (msg: ReactionMessage) => void;
+  fishCount: (msg: FishCountMessage) => void;
 }

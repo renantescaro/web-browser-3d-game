@@ -178,7 +178,8 @@ body {
   align-items: center;
 }
 
-.hud-online {
+.hud-online,
+.hud-fish {
   padding: 6px 12px;
   border-radius: 999px;
   background: rgb(0 0 0 / 0.45);
@@ -229,6 +230,34 @@ body {
 }
 
 .hud-hint[hidden] {
+  display: none;
+}
+
+/* Ação atual da tecla F (Bater/Pescar/Fisgar), no canto inferior direito. */
+.hud-action {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.hud-action b {
+  display: inline-block;
+  min-width: 1.4em;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #fff;
+  color: #222;
+  text-align: center;
+}
+
+.hud-action[hidden] {
   display: none;
 }
 
@@ -291,7 +320,7 @@ body {
   background: rgb(255 255 255 / 0.35);
 }
 
-.touch-punch {
+.touch-action {
   right: calc(28px + env(safe-area-inset-right));
   bottom: calc(40px + env(safe-area-inset-bottom));
   width: 84px;
@@ -391,4 +420,90 @@ body {
   20%  { transform: scale(1)   translateY(0);    opacity: 1; }
   75%  { transform: scale(1)   translateY(-8px); opacity: 1; }
   100% { transform: scale(0.9) translateY(-14px);opacity: 0; }
+}
+
+/* ---------- Minigame de pesca ---------- */
+.fishing-panel {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  width: min(420px, calc(100% - 24px));
+  padding: 12px 16px 14px;
+  border-radius: 14px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  text-align: center;
+  pointer-events: auto;
+}
+
+.fishing-panel[hidden] {
+  display: none;
+}
+
+.fishing-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.fishing-level {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.fishing-bar {
+  position: relative;
+  height: 22px;
+  margin: 10px 0 8px;
+  border-radius: 11px;
+  background: #2b5f7a;
+  overflow: hidden;
+}
+
+.fishing-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #57cc99;
+}
+
+.fishing-marker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 6px;
+  margin-left: -3px;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 6px rgb(0 0 0 / 0.6);
+}
+
+.fishing-panel[data-phase="caught"] .fishing-zone {
+  background: #f6d743;
+}
+
+.fishing-panel[data-phase="missed"] .fishing-zone {
+  background: #e63946;
+}
+
+.fishing-message {
+  min-height: 1.4em;
+  font-size: 14px;
+}
+
+.fishing-exit {
+  margin-top: 8px;
+  padding: 5px 14px;
+  border: 1px solid rgb(255 255 255 / 0.6);
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fishing-exit:hover {
+  background: rgb(255 255 255 / 0.15);
 }

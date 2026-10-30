@@ -79,6 +79,14 @@ export class Physics {
     return this.world.createCollider(desc);
   }
 
+  /** Caixa fixa apoiada no chão, girada no eixo Y (ex.: banco, placa). */
+  createStaticBox(x: number, z: number, half: Vec3, rotationY: number): RAPIER.Collider {
+    const desc = RAPIER.ColliderDesc.cuboid(half.x, half.y, half.z)
+      .setTranslation(x, half.y, z)
+      .setRotation({ x: 0, y: Math.sin(rotationY / 2), z: 0, w: Math.cos(rotationY / 2) });
+    return this.world.createCollider(desc);
+  }
+
   removeCollider(collider: RAPIER.Collider): void {
     this.world.removeCollider(collider, false);
   }
