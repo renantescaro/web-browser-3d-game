@@ -11,6 +11,8 @@ export interface Intents {
   punch: boolean;
   /** Liga/desliga a música (tecla M). */
   toggleMusic: boolean;
+  /** Índice da reação (0–3) ou null se nenhuma. Teclas 1–4. */
+  reaction: number | null;
   lookDX: number;
   lookDY: number;
 }
@@ -20,6 +22,7 @@ export class Input {
   private jumpQueued = false;
   private punchQueued = false;
   private musicQueued = false;
+  private reactionQueued: number | null = null;
   private lookDX = 0;
   private lookDY = 0;
   /** Avisado quando o pointer lock muda (para a HUD). */
@@ -51,6 +54,7 @@ export class Input {
       jump: this.jumpQueued,
       punch: this.punchQueued,
       toggleMusic: this.musicQueued,
+      reaction: this.reactionQueued,
       lookDX: this.lookDX,
       lookDY: this.lookDY,
     };
@@ -63,12 +67,14 @@ export class Input {
       }
       intents.jump ||= t.jump;
       intents.punch ||= t.punch;
+      if (intents.reaction === null) intents.reaction = t.reaction;
       intents.lookDX += t.lookDX;
       intents.lookDY += t.lookDY;
     }
     this.jumpQueued = false;
     this.punchQueued = false;
     this.musicQueued = false;
+    this.reactionQueued = null;
     this.lookDX = 0;
     this.lookDY = 0;
     return intents;
@@ -82,6 +88,8 @@ export class Input {
     }
     if (e.code === "KeyF" && !e.repeat) this.punchQueued = true;
     if (e.code === "KeyM" && !e.repeat) this.musicQueued = true;
+    const reactionIndex = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3 }[e.code];
+    if (reactionIndex !== undefined && !e.repeat) this.reactionQueued = reactionIndex;
     this.keys.add(e.code);
   };
 

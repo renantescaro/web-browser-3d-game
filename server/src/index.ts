@@ -5,7 +5,7 @@ import { dirname, extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Server } from "socket.io";
 import { SERVER_PORT, TICK_RATE } from "@jogo/shared/constants";
-import type { ClientToServerEvents, ServerToClientEvents } from "@jogo/shared/protocol";
+import type { ClientToServerEvents, ReactionId, ServerToClientEvents } from "@jogo/shared/protocol";
 import { Room } from "./Room.js";
 import { parseJoin, parseState, RateLimiter } from "./validation.js";
 
@@ -55,6 +55,7 @@ io.on("connection", (socket) => {
   const joinLimiter = new RateLimiter(1, 5);
   const stateLimiter = new RateLimiter(30, 40);
   const punchLimiter = new RateLimiter(5, 5);
+  const reactionLimiter = new RateLimiter(6, 10);
 
   socket.emit("lobby", lobbyMessage());
 
@@ -85,6 +86,12 @@ io.on("connection", (socket) => {
     if (!room.has(socket.id) || !punchLimiter.allow()) return;
     const hit = room.punch(socket.id);
     if (hit) io.to("game").emit("hit", hit);
+  });
+
+  socket.on("reaction", (raw: unknown) => {
+    if (!room.has(socket.id) || !reactionLimiter.allow()) return;
+    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0 || raw > 3) return;
+    io.to("game").emit("reaction", { playerId: socket.id, reactionId: raw as ReactionId });
   });
 
   socket.on("disconnect", () => {

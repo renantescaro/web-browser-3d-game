@@ -1,6 +1,6 @@
 // Conexão Socket.IO tipada com o protocolo compartilhado.
 import { io, type Socket } from "socket.io-client";
-import type { ClientToServerEvents, JoinMessage, ServerToClientEvents, StateMessage } from "@jogo/shared/protocol";
+import type { ClientToServerEvents, JoinMessage, ReactionId, ServerToClientEvents, StateMessage } from "@jogo/shared/protocol";
 
 export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -36,5 +36,9 @@ export class Network {
 
   punch(): void {
     if (this.socket.connected) this.socket.emit("punch", {});
+  }
+
+  sendReaction(reactionId: number): void {
+    if (this.socket.connected) this.socket.emit("reaction", reactionId as ReactionId);
   }
 }

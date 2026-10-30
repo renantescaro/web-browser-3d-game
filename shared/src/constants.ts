@@ -85,3 +85,9 @@ export const TOUCH_LOOK_SCALE = 1.6;
 export const MUSIC_BPM = 100;
 /** Volume geral da música (0–1); baixo para não abafar o jogo. */
 export const MUSIC_VOLUME = 0.22;
+
+// --- Reações ---
+/** Emojis disponíveis, indexados pelo ReactionId (0–3). */
+export const REACTIONS = ["😊", "😢", "😠", "💡"] as const;
+/** Duração total da animação de reação, em ms. */
+export const REACTION_DURATION_MS = 2500;

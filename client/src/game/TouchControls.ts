@@ -13,6 +13,7 @@ export interface TouchIntents {
   run: boolean;
   jump: boolean;
   punch: boolean;
+  reaction: number | null;
   lookDX: number;
   lookDY: number;
 }
@@ -29,6 +30,7 @@ export class TouchControls {
   private moveZ = 0;
   private jumpQueued = false;
   private punchQueued = false;
+  private reactionQueued: number | null = null;
   private lookDX = 0;
   private lookDY = 0;
 
@@ -44,7 +46,18 @@ export class TouchControls {
 
     const jump = this.createButton("Pular", "touch-jump", () => (this.jumpQueued = true));
     const punch = this.createButton("Bater", "touch-punch", () => (this.punchQueued = true));
-    this.root.append(this.stick, jump, punch);
+    const reactionEmojis = ["😊", "😢", "😠", "💡"] as const;
+    const reactionContainer = document.createElement("div");
+    reactionContainer.className = "touch-reactions";
+    for (let i = 0; i < reactionEmojis.length; i++) {
+      const idx = i;
+      reactionContainer.appendChild(
+        this.createButton(reactionEmojis[idx] ?? "", `touch-reaction touch-reaction-${idx}`, () => {
+          this.reactionQueued = idx;
+        }),
+      );
+    }
+    this.root.append(this.stick, jump, punch, reactionContainer);
     container.appendChild(this.root);
 
     this.stick.addEventListener("pointerdown", this.onStickDown);
@@ -65,11 +78,13 @@ export class TouchControls {
       run: tilt >= TOUCH_RUN_THRESHOLD,
       jump: this.jumpQueued,
       punch: this.punchQueued,
+      reaction: this.reactionQueued,
       lookDX: this.lookDX * TOUCH_LOOK_SCALE,
       lookDY: this.lookDY * TOUCH_LOOK_SCALE,
     };
     this.jumpQueued = false;
     this.punchQueued = false;
+    this.reactionQueued = null;
     this.lookDX = 0;
     this.lookDY = 0;
     return intents;

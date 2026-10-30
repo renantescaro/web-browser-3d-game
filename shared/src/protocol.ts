@@ -22,6 +22,13 @@ export interface PlayerSnapshot {
 
 export type JoinRejectReason = "full" | "invalidName" | "colorTaken";
 
+export type ReactionId = 0 | 1 | 2 | 3;
+
+export interface ReactionMessage {
+  playerId: string;
+  reactionId: ReactionId;
+}
+
 // --- Cliente → servidor ---
 export interface JoinMessage {
   name: string;
@@ -77,6 +84,7 @@ export interface ClientToServerEvents {
   join: (msg: JoinMessage) => void;
   state: (msg: StateMessage) => void;
   punch: (msg: PunchMessage) => void;
+  reaction: (reactionId: ReactionId) => void;
 }
 
 /** Eventos que o servidor envia (tipagem do Socket.IO). */
@@ -88,4 +96,5 @@ export interface ServerToClientEvents {
   playerLeft: (msg: PlayerLeftMessage) => void;
   snapshot: (msg: SnapshotMessage) => void;
   hit: (msg: HitMessage) => void;
+  reaction: (msg: ReactionMessage) => void;
 }

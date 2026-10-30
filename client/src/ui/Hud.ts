@@ -40,9 +40,9 @@ export class Hud {
     help.className = touchMode ? "hud-help hud-help-touch" : "hud-help";
     help.dataset.testid = "controls-help";
     help.innerHTML = touchMode
-      ? "<b>Analógico</b> mover (até a borda: correr)<br><b>Arraste a tela</b> câmera"
+      ? "<b>Analógico</b> mover (até a borda: correr)<br><b>Arraste a tela</b> câmera · <b>😊😢😠💡</b> reações"
       : "<b>WASD</b> mover · <b>Shift</b> correr · <b>Espaço</b> pular<br>" +
-        "<b>Clique</b> ou <b>F</b> bater · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música";
+        "<b>Clique</b> ou <b>F</b> bater · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
 
     const topRight = document.createElement("div");
     topRight.className = "hud-top-right";

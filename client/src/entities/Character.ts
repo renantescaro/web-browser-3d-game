@@ -1,7 +1,7 @@
 // Pessoa simples feita de primitivas + animações procedurais + rótulo de nome.
 import * as THREE from "three";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { PUNCH_ANIM_MS, RUN_SPEED, WALK_SPEED } from "@jogo/shared/constants";
+import { PUNCH_ANIM_MS, REACTION_DURATION_MS, RUN_SPEED, WALK_SPEED } from "@jogo/shared/constants";
 import type { AnimState } from "@jogo/shared/protocol";
 
 const SKIN_COLOR = 0xe0b48f;
@@ -11,6 +11,7 @@ const HIT_JOLT_MS = 260;
 /** Quanto a fase do passo avança por metro andado (rad/m). */
 const STRIDE = 2.4;
 const LABEL_HEIGHT = 2.05;
+const REACTION_HEIGHT = 2.65;
 
 // Medidas (metros). A altura total fica em ~1,8.
 const HIP_Y = 0.9;
@@ -40,6 +41,9 @@ export class Character {
   private readonly materials: THREE.MeshStandardMaterial[] = [];
   private readonly geometries: THREE.BufferGeometry[] = [];
   private readonly label: CSS2DObject;
+  private readonly reactionEl: HTMLDivElement;
+  private readonly reactionLabel: CSS2DObject;
+  private reactionTimeout: ReturnType<typeof setTimeout> | null = null;
 
   private time = Math.random() * 10;
   private walkPhase = 0;
@@ -85,6 +89,18 @@ export class Character {
     this.label = new CSS2DObject(el);
     this.label.position.y = LABEL_HEIGHT;
     this.root.add(this.label);
+
+    // Bolha de reação acima do nome.
+    // O CSS2DRenderer sobrescreve o `style.transform` do elemento que recebe, então usamos
+    // um wrapper: o renderer posiciona o wrapper, e o emoji fica no filho — sem conflito.
+    const reactionWrapper = document.createElement("div");
+    reactionWrapper.className = "reaction-wrapper";
+    this.reactionEl = document.createElement("div");
+    this.reactionEl.className = "reaction-bubble";
+    reactionWrapper.appendChild(this.reactionEl);
+    this.reactionLabel = new CSS2DObject(reactionWrapper);
+    this.reactionLabel.position.y = REACTION_HEIGHT;
+    this.root.add(this.reactionLabel);
   }
 
   private material(color: THREE.ColorRepresentation): THREE.MeshStandardMaterial {
@@ -115,6 +131,19 @@ export class Character {
   /** Reação a um soco: tranco para trás + flash branco. */
   playHit(): void {
     this.hitElapsed = 0;
+  }
+
+  /** Exibe uma reação acima do personagem (emoji flutuante visível para todos). */
+  playReaction(emoji: string): void {
+    if (this.reactionTimeout !== null) clearTimeout(this.reactionTimeout);
+    this.reactionEl.textContent = emoji;
+    this.reactionEl.classList.remove("reaction-bubble--active");
+    void this.reactionEl.offsetWidth; // força reflow para reiniciar a animação
+    this.reactionEl.classList.add("reaction-bubble--active");
+    this.reactionTimeout = setTimeout(() => {
+      this.reactionEl.classList.remove("reaction-bubble--active");
+      this.reactionTimeout = null;
+    }, REACTION_DURATION_MS);
   }
 
   /** @param speed velocidade horizontal (m/s), usada na frequência do passo. */
@@ -183,9 +212,12 @@ export class Character {
   }
 
   dispose(): void {
+    if (this.reactionTimeout !== null) clearTimeout(this.reactionTimeout);
     this.root.removeFromParent();
     this.label.removeFromParent();
     this.label.element.remove();
+    this.reactionLabel.removeFromParent();
+    this.reactionLabel.element.remove();
     for (const g of this.geometries) g.dispose();
     for (const m of this.materials) m.dispose();
   }

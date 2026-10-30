@@ -1,6 +1,6 @@
 // Loop principal: input → física em passo fixo → renderização interpolada → rede.
 import * as THREE from "three";
-import { PHYSICS_HZ, TICK_RATE } from "@jogo/shared/constants";
+import { PHYSICS_HZ, REACTIONS, TICK_RATE } from "@jogo/shared/constants";
 import type {
   HitMessage,
   JoinMessage,
@@ -8,6 +8,7 @@ import type {
   LobbyMessage,
   PlayerJoinedMessage,
   PlayerLeftMessage,
+  ReactionMessage,
   SnapshotMessage,
   WelcomeMessage,
 } from "@jogo/shared/protocol";
@@ -108,6 +109,7 @@ export class Game {
     s.on("snapshot", this.onSnapshot);
     s.on("hit", this.onHit);
     s.on("lobby", this.onLobby);
+    s.on("reaction", this.onReaction);
     s.on("disconnect", this.onDisconnect);
   }
 
@@ -120,6 +122,7 @@ export class Game {
     s.off("snapshot", this.onSnapshot);
     s.off("hit", this.onHit);
     s.off("lobby", this.onLobby);
+    s.off("reaction", this.onReaction);
     s.off("disconnect", this.onDisconnect);
   }
 
@@ -147,6 +150,12 @@ export class Game {
     else this.remotes.get(msg.targetId)?.playHit();
   };
 
+  private readonly onReaction = (msg: ReactionMessage): void => {
+    if (msg.playerId === this.selfId) return;
+    const emoji = REACTIONS[msg.reactionId];
+    if (emoji) this.remotes.get(msg.playerId)?.character.playReaction(emoji);
+  };
+
   // ---------- Loop ----------
 
   private readonly loop = (time: number): void => {
@@ -161,6 +170,13 @@ export class Game {
     this.local.setInput(this.moveDir, intents.run, intents.jump);
     if (intents.punch && this.local.tryPunch(time)) this.network.punch();
     if (intents.toggleMusic) this.toggleMusic();
+    if (intents.reaction !== null) {
+      const emoji = REACTIONS[intents.reaction];
+      if (emoji) {
+        this.local.character.playReaction(emoji);
+        this.network.sendReaction(intents.reaction);
+      }
+    }
 
     // 2) Remotos (interpolação + colliders) e física em passo fixo
     this.remotes.update(time, dt);
