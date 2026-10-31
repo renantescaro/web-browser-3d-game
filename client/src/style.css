@@ -503,8 +503,8 @@ body {
   background: rgb(255 255 255 / 0.15);
 }
 
-/* ---------- Comerciante ---------- */
-.merchant-panel {
+/* ---------- Lojas (comerciante e roupas) ---------- */
+.shop-panel {
   position: absolute;
   top: 64px;
   left: 50%;
@@ -519,32 +519,32 @@ body {
   pointer-events: auto;
 }
 
-.merchant-panel[hidden] {
+.shop-panel[hidden] {
   display: none;
 }
 
-.merchant-title {
+.shop-title {
   font-weight: 700;
   font-size: 16px;
 }
 
-.merchant-name {
+.shop-name {
   font-weight: 400;
   opacity: 0.8;
 }
 
-.merchant-wallet {
+.shop-wallet {
   margin: 6px 0 10px;
   font-size: 14px;
 }
 
-.merchant-items {
+.shop-items {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.merchant-item {
+.shop-item {
   display: grid;
   grid-template-columns: 1fr auto auto auto;
   gap: 8px;
@@ -556,17 +556,17 @@ body {
   text-align: left;
 }
 
-.merchant-item-name {
+.shop-item-name {
   font-weight: 600;
 }
 
-.merchant-item-stock {
+.shop-item-info {
   opacity: 0.85;
   font-size: 13px;
 }
 
-.merchant-buy,
-.merchant-sell {
+.shop-buy,
+.shop-sell {
   padding: 5px 10px;
   border: none;
   border-radius: 8px;
@@ -577,22 +577,22 @@ body {
   cursor: pointer;
 }
 
-.merchant-buy {
+.shop-buy {
   background: #2a9d8f;
 }
 
-.merchant-sell {
+.shop-sell {
   background: #e76f51;
 }
 
-.merchant-buy:disabled,
-.merchant-sell:disabled {
+.shop-buy:disabled,
+.shop-sell:disabled {
   background: rgb(255 255 255 / 0.2);
   color: rgb(255 255 255 / 0.55);
   cursor: default;
 }
 
-.merchant-exit {
+.shop-exit {
   margin-top: 10px;
   padding: 5px 14px;
   border: 1px solid rgb(255 255 255 / 0.6);
@@ -604,13 +604,29 @@ body {
   cursor: pointer;
 }
 
-.merchant-exit:hover {
+.shop-exit:hover {
   background: rgb(255 255 255 / 0.15);
+}
+
+/* Linha com um botão só (loja de roupas): nome, situação e comprar. */
+.shop-item--single {
+  grid-template-columns: 1fr auto auto;
+}
+
+/* Título de um grupo de itens (ex.: parte do corpo na loja de roupas). */
+.shop-group {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
 }
 
 /* No celular a linha do item quebra: nome e estoque em cima, botões embaixo. */
 @media (max-width: 420px) {
-  .merchant-item {
+  .shop-item {
     grid-template-columns: 1fr auto;
   }
 }

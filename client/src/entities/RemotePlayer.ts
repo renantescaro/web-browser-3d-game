@@ -3,6 +3,7 @@ import * as THREE from "three";
 import type RAPIER from "@dimforge/rapier3d-compat";
 import { INTERPOLATION_DELAY_MS } from "@jogo/shared/constants";
 import { wrapAngle } from "@jogo/shared/math";
+import type { Outfit } from "@jogo/shared/outfits";
 import type { AnimState, PlayerSnapshot } from "@jogo/shared/protocol";
 import { CAPSULE_CENTER_Y, type Physics } from "../game/Physics";
 import { Character } from "./Character";
@@ -28,6 +29,7 @@ export class RemotePlayer {
   private rotationY: number;
   private anim: AnimState = "idle";
   private speed = 0;
+  private outfit: Outfit = {};
 
   constructor(
     private readonly physics: Physics,
@@ -47,6 +49,8 @@ export class RemotePlayer {
 
   /** Guarda um novo estado recebido, com horário já convertido para o relógio local. */
   push(snapshot: PlayerSnapshot, t: number): void {
+    this.outfit = snapshot.outfit;
+    this.character.setOutfit(snapshot.outfit);
     const last = this.buffer[this.buffer.length - 1];
     if (last && t <= last.t) return;
     const p = snapshot.position;
@@ -58,6 +62,11 @@ export class RemotePlayer {
       anim: snapshot.anim,
     });
     if (this.buffer.length > MAX_BUFFER) this.buffer.shift();
+  }
+
+  /** O que o jogador veste agora (para os testes E2E). */
+  get currentOutfit(): Outfit {
+    return this.outfit;
   }
 
   /** Recebeu um soco: só a reação visual (o empurrão vem pelo estado do próprio jogador). */

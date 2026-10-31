@@ -1,9 +1,11 @@
 // Validação e sanitização de tudo que chega do cliente. Nunca confie no cliente.
 import { MAX_FISH_CAUGHT, MAX_HEIGHT, MAX_MONEY, NAME_MAX_LENGTH, NAME_MIN_LENGTH, PLAYER_COLORS, PLAYER_RADIUS, WORLD_HALF } from "@jogo/shared/constants";
 import { isItemId } from "@jogo/shared/items";
+import { isOutfitItemId, OUTFIT_SLOTS, outfitItem, type Outfit } from "@jogo/shared/outfits";
 import {
   ANIM_STATES,
   type AnimState,
+  type BuyOutfitMessage,
   type FeedAnimalMessage,
   type ShootingShotMessage,
   type StateMessage,
@@ -40,14 +42,26 @@ export function isValidColor(value: unknown): value is string {
 /** Valida o formato do `join`. Nome e cor são verificados na sala (para dar o motivo certo). */
 export function parseJoin(
   value: unknown,
-): { name: unknown; color: unknown; fishCaught: number; money: number } | null {
+): { name: unknown; color: unknown; fishCaught: number; money: number; outfit: Outfit } | null {
   if (!isRecord(value)) return null;
   return {
     name: value.name,
     color: value.color,
     fishCaught: parseCount(value.fishCaught, MAX_FISH_CAUGHT),
     money: parseCount(value.money, MAX_MONEY),
+    outfit: parseOutfit(value.outfit),
   };
+}
+
+/** Roupas vindas do cliente ao reconectar: só fica o item do catálogo que é da parte certa do corpo. */
+export function parseOutfit(value: unknown): Outfit {
+  const outfit: Outfit = {};
+  if (!isRecord(value)) return outfit;
+  for (const slot of OUTFIT_SLOTS) {
+    const item = value[slot];
+    if (isOutfitItemId(item) && outfitItem(item).slot === slot) outfit[slot] = item;
+  }
+  return outfit;
 }
 
 /** Contagem vinda do cliente ao reconectar (peixes, dinheiro): inteiro entre 0 e `max`; senão 0. */
@@ -88,6 +102,12 @@ export function parseTrade(value: unknown): TradeMessage | null {
   if (!isRecord(value) || !isItemId(value.item)) return null;
   if (value.action !== "buy" && value.action !== "sell") return null;
   return { item: value.item, action: value.action };
+}
+
+/** Valida o `buyOutfit`. Distância, dinheiro e intervalo são conferidos na loja. */
+export function parseBuyOutfit(value: unknown): BuyOutfitMessage | null {
+  if (!isRecord(value) || !isOutfitItemId(value.item)) return null;
+  return { item: value.item };
 }
 
 /** Valida o tiro do Tiro ao Alvo. A partida, a distância e o intervalo são conferidos na galeria. */

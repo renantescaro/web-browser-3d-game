@@ -1,11 +1,7 @@
 // Painel do comerciante: dinheiro e itens do jogador, estoque e botões de comprar/vender.
 import { ITEM_IDS, ITEMS, type ItemId } from "@jogo/shared/items";
 import type { MerchantStock, TradeAction } from "@jogo/shared/protocol";
-
-/** Dinheiro em reais (valores inteiros por enquanto). */
-export function formatMoney(amount: number): string {
-  return `R$ ${amount}`;
-}
+import { formatMoney, shopButton } from "./shopUi";
 
 /** O que o painel mostra; os botões ficam desabilitados quando o negócio não é possível. */
 export interface MerchantView {
@@ -32,24 +28,24 @@ export class MerchantPanel {
   onExit: (() => void) | null = null;
 
   constructor(container: HTMLElement, touchMode: boolean) {
-    this.root.className = "merchant-panel";
+    this.root.className = "shop-panel";
     this.root.dataset.testid = "merchant-panel";
     this.root.hidden = true;
 
     const title = document.createElement("div");
-    title.className = "merchant-title";
+    title.className = "shop-title";
     title.textContent = "🧺 Comerciante ";
-    this.name.className = "merchant-name";
+    this.name.className = "shop-name";
     title.appendChild(this.name);
 
-    this.wallet.className = "merchant-wallet";
+    this.wallet.className = "shop-wallet";
     this.wallet.dataset.testid = "merchant-wallet";
 
     const list = document.createElement("div");
-    list.className = "merchant-items";
+    list.className = "shop-items";
     for (const id of ITEM_IDS) list.appendChild(this.createRow(id));
 
-    const exit = this.button("merchant-exit", touchMode ? "Sair" : "Sair (Q)", () => this.onExit?.());
+    const exit = shopButton("shop-exit", touchMode ? "Sair" : "Sair (Q)", () => this.onExit?.());
     exit.dataset.testid = "merchant-exit";
 
     this.root.append(title, this.wallet, list, exit);
@@ -59,33 +55,20 @@ export class MerchantPanel {
   private createRow(id: ItemId): HTMLElement {
     const item = ITEMS[id];
     const row = document.createElement("div");
-    row.className = "merchant-item";
+    row.className = "shop-item";
     const label = document.createElement("span");
-    label.className = "merchant-item-name";
+    label.className = "shop-item-name";
     label.textContent = `${item.emoji} ${item.name}`;
     const stock = document.createElement("span");
-    stock.className = "merchant-item-stock";
+    stock.className = "shop-item-info";
     stock.dataset.testid = `merchant-stock-${id}`;
-    const buy = this.button("merchant-buy", `Comprar ${formatMoney(item.price.buy)}`, () => this.onTrade?.(id, "buy"));
+    const buy = shopButton("shop-buy", `Comprar ${formatMoney(item.price.buy)}`, () => this.onTrade?.(id, "buy"));
     buy.dataset.testid = `merchant-buy-${id}`;
-    const sell = this.button("merchant-sell", `Vender ${formatMoney(item.price.sell)}`, () => this.onTrade?.(id, "sell"));
+    const sell = shopButton("shop-sell", `Vender ${formatMoney(item.price.sell)}`, () => this.onTrade?.(id, "sell"));
     sell.dataset.testid = `merchant-sell-${id}`;
     row.append(label, stock, buy, sell);
     this.rows.set(id, { stock, buy, sell });
     return row;
-  }
-
-  private button(className: string, text: string, onClick: () => void): HTMLButtonElement {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = className;
-    b.textContent = text;
-    b.addEventListener("click", () => {
-      // Tira o foco para o Espaço (pular) não acionar o botão de novo.
-      b.blur();
-      onClick();
-    });
-    return b;
   }
 
   get visible(): boolean {

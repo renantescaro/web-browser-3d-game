@@ -1,5 +1,6 @@
 // Tipos de TODAS as mensagens de rede. Fonte única da verdade para cliente e servidor.
 import type { ItemId } from "./items";
+import type { Outfit, OutfitItemId } from "./outfits";
 
 export interface Vec3 {
   x: number;
@@ -24,6 +25,8 @@ export interface PlayerSnapshot {
   fishCaught: number;
   /** Dinheiro do jogador, em reais. */
   money: number;
+  /** Roupas e acessórios que o jogador veste (comprados da Deendi). */
+  outfit: Outfit;
 }
 
 export type JoinRejectReason = "full" | "invalidName" | "colorTaken";
@@ -115,6 +118,8 @@ export interface CharacterAppearance {
   bowTieColor?: string;
   /** Colete por cima da camisa. */
   vestColor?: string;
+  /** Roupas e acessórios do catálogo (`outfits.ts`), os mesmos que os jogadores compram. */
+  outfit?: Outfit;
 }
 
 /** Quanto de cada item o comerciante tem. */
@@ -148,6 +153,19 @@ export interface ShootingBoothData {
   signText: string;
 }
 
+/** A loja de roupas e acessórios da Deendi: um balcão com arara, ao lado da praça. */
+export interface ClothingShopData {
+  sellerName: string;
+  appearance: CharacterAppearance;
+  /** Pés da vendedora, atrás do balcão. */
+  position: Vec3;
+  /** Olha para o lado dos clientes (o balcão fica à frente dela). */
+  rotationY: number;
+  /** Centro do balcão (y = 0). Para comprar, o jogador fica perto dele. */
+  counter: Vec3;
+  signText: string;
+}
+
 export type ReactionId = 0 | 1 | 2 | 3;
 
 export interface ReactionMessage {
@@ -163,6 +181,8 @@ export interface JoinMessage {
   fishCaught?: number;
   /** Dinheiro (reais); reenviado ao reconectar, como os peixes. */
   money?: number;
+  /** Roupas vestidas; reenviadas ao reconectar, como o dinheiro. */
+  outfit?: Outfit;
 }
 
 export interface StateMessage {
@@ -202,6 +222,11 @@ export interface ShootingShotMessage {
 /** Sair do Tiro ao Alvo no meio (perde a entrada). */
 export type ShootingStopMessage = Record<string, never>;
 
+/** Comprar (e já vestir) uma roupa ou acessório da Deendi. */
+export interface BuyOutfitMessage {
+  item: OutfitItemId;
+}
+
 // --- Servidor → cliente ---
 export interface LobbyMessage {
   takenColors: string[];
@@ -216,6 +241,7 @@ export interface WelcomeMessage {
   square: SquareData;
   merchant: MerchantData;
   shootingBooth: ShootingBoothData;
+  clothingShop: ClothingShopData;
 }
 
 export interface JoinRejectedMessage {
@@ -283,6 +309,17 @@ export interface ShootingResultMessage {
   won: boolean;
 }
 
+/** Roupas atualizadas do próprio jogador, depois de uma compra. */
+export interface OutfitMessage {
+  outfit: Outfit;
+}
+
+/** `playerId` comprou na loja de roupas: todos veem a Deendi comemorar. */
+export interface OutfitSoldMessage {
+  playerId: string;
+  item: OutfitItemId;
+}
+
 export interface HitMessage {
   attackerId: string;
   targetId: string;
@@ -301,6 +338,7 @@ export interface ClientToServerEvents {
   shootingStart: (msg: ShootingStartMessage) => void;
   shootingShot: (msg: ShootingShotMessage) => void;
   shootingStop: (msg: ShootingStopMessage) => void;
+  buyOutfit: (msg: BuyOutfitMessage) => void;
 }
 
 /** Eventos que o servidor envia (tipagem do Socket.IO). */
@@ -319,4 +357,6 @@ export interface ServerToClientEvents {
   merchantStock: (msg: MerchantStockMessage) => void;
   shooting: (msg: ShootingStateMessage) => void;
   shootingResult: (msg: ShootingResultMessage) => void;
+  outfit: (msg: OutfitMessage) => void;
+  outfitSold: (msg: OutfitSoldMessage) => void;
 }

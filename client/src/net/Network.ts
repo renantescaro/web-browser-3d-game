@@ -1,6 +1,7 @@
 // Conexão Socket.IO tipada com o protocolo compartilhado.
 import { io, type Socket } from "socket.io-client";
 import type { ItemId } from "@jogo/shared/items";
+import type { Outfit, OutfitItemId } from "@jogo/shared/outfits";
 import type {
   ClientToServerEvents,
   JoinMessage,
@@ -46,6 +47,16 @@ export class Network {
   /** Atualiza o dinheiro da sessão, reenviado no `join` ao reconectar. */
   rememberMoney(amount: number): void {
     if (this.session) this.session = { ...this.session, money: amount };
+  }
+
+  /** Atualiza as roupas da sessão, reenviadas no `join` ao reconectar. */
+  rememberOutfit(outfit: Outfit): void {
+    if (this.session) this.session = { ...this.session, outfit: { ...outfit } };
+  }
+
+  /** Compra (e veste) uma roupa da Deendi; o servidor confere e responde com `money` e `outfit`. */
+  buyOutfit(item: OutfitItemId): void {
+    if (this.socket.connected) this.socket.emit("buyOutfit", { item });
   }
 
   /** Compra ou vende uma unidade com o comerciante; o servidor confere e responde. */

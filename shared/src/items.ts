@@ -12,7 +12,7 @@ export interface ItemInfo {
 }
 
 export const ITEMS = {
-  fish: { name: "Peixe", emoji: "🐟", price: { buy: 1, sell: 1 }, stock: { initial: 5, max: 50 } },
+  fish: { name: "Peixe", emoji: "🐟", price: { buy: 1, sell: 1 }, stock: { initial: 5, max: 1000 } },
 } satisfies Record<string, ItemInfo>;
 
 export type ItemId = keyof typeof ITEMS;

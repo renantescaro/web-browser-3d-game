@@ -7,7 +7,8 @@
     "./protocol": "./src/protocol.ts",
     "./constants": "./src/constants.ts",
     "./math": "./src/math.ts",
-    "./items": "./src/items.ts"
+    "./items": "./src/items.ts",
+    "./outfits": "./src/outfits.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

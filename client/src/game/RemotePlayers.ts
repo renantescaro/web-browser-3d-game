@@ -1,5 +1,6 @@
 // Coleção de jogadores remotos: entrada, saída, snapshots e sincronia de relógio.
 import type * as THREE from "three";
+import type { Outfit } from "@jogo/shared/outfits";
 import type { PlayerSnapshot, SnapshotMessage } from "@jogo/shared/protocol";
 import { RemotePlayer } from "../entities/RemotePlayer";
 import type { Physics } from "./Physics";
@@ -64,13 +65,14 @@ export class RemotePlayers {
   }
 
   /** Informações para os testes E2E. */
-  debugInfo(): { id: string; name: string; x: number; y: number; z: number }[] {
+  debugInfo(): { id: string; name: string; x: number; y: number; z: number; outfit: Outfit }[] {
     return [...this.players.values()].map((p) => ({
       id: p.id,
       name: p.name,
       x: p.position.x,
       y: p.position.y,
       z: p.position.z,
+      outfit: { ...p.currentOutfit },
     }));
   }
 

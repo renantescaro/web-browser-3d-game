@@ -1,8 +1,8 @@
-// Botão de Ação contextual (F, clique ou botão de toque). Cada sistema (comerciante, Tiro
-// ao Alvo, dar peixe, pesca…) é um `ActionHandler`; o primeiro da lista que tiver algo a
+// Botão de Ação contextual (F, clique ou botão de toque). Cada sistema (comerciante, loja de
+// roupas, Tiro ao Alvo, dar peixe, pesca…) é um `ActionHandler`; o primeiro da lista que tiver algo a
 // fazer ganha a Ação. Se nenhum tiver, a Ação é bater.
 import { SHOOTING_ENTRY_COST } from "@jogo/shared/constants";
-import { formatMoney } from "../ui/MerchantPanel";
+import { formatMoney } from "../ui/shopUi";
 
 /** Rótulos do botão de Ação. */
 export const ACTION_LABELS = {
@@ -12,6 +12,7 @@ export const ACTION_LABELS = {
   feed: "Dar peixe",
   trade: "Negociar",
   closeTrade: "Fechar",
+  clothes: "Comprar roupas",
   play: `Jogar (${formatMoney(SHOOTING_ENTRY_COST)})`,
   shoot: "Atirar",
 } as const;

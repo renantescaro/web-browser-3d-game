@@ -1,12 +1,12 @@
 // API de depuração exposta pelo cliente em modo dev (ver client/src/game/Game.ts).
-export {};
+import type { Outfit } from "@jogo/shared/outfits";
 
 declare global {
   interface Window {
     __jogo?: {
       selfId: () => string;
       local: () => { x: number; y: number; z: number; rotationY: number; anim: string };
-      remotes: () => { id: string; name: string; x: number; y: number; z: number }[];
+      remotes: () => { id: string; name: string; x: number; y: number; z: number; outfit: Outfit }[];
       lookAt: (x: number, z: number) => void;
       trees: () => { type: string; x: number; z: number; scale: number }[];
       square: () => {
@@ -58,6 +58,16 @@ declare global {
         } | null;
         ducks: { id: string; x: number; y: number; z: number; hittable: boolean }[];
       };
+      clothing: () => {
+        sellerName: string;
+        signText: string;
+        x: number;
+        z: number;
+        rotationY: number;
+        counter: { x: number; z: number };
+        outfit: Outfit;
+        open: boolean;
+      } | null;
       aimAt: (x: number, y: number, z: number) => void;
     };
   }

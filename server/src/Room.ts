@@ -1,4 +1,4 @@
-// Estado da sala: entrada/saída, limite de jogadores, cores únicas, estados, socos e dinheiro.
+// Estado da sala: entrada/saída, limite de jogadores, cores únicas, estados, socos, dinheiro e roupas.
 import {
   FEED_COOLDOWN_MS,
   FEED_RANGE,
@@ -21,6 +21,7 @@ import {
   TRADE_COOLDOWN_MS,
 } from "@jogo/shared/constants";
 import { ITEMS, type ItemId } from "@jogo/shared/items";
+import type { Outfit } from "@jogo/shared/outfits";
 import type { HitMessage, JoinRejectReason, PlayerSnapshot, StateMessage, TradeMessage, Vec3 } from "@jogo/shared/protocol";
 import { distanceXZ, forwardFromYaw } from "@jogo/shared/math";
 import type { Merchant } from "./Merchant.js";
@@ -49,6 +50,13 @@ const TRADE_DISTANCE_SLACK = 1.5;
 
 export type TradeResult = { money: number; fishCaught: number };
 
+/** O que o cliente reenvia no `join` ao reconectar (já validado). */
+export interface SavedProgress {
+  fishCaught: number;
+  money: number;
+  outfit: Outfit;
+}
+
 export type JoinResult = { ok: true; player: PlayerSnapshot } | { ok: false; reason: JoinRejectReason };
 
 export class Room {
@@ -73,7 +81,7 @@ export class Room {
     return [...this.players.values()].map((p) => p.snapshot);
   }
 
-  join(id: string, rawName: unknown, rawColor: unknown, fishCaught = 0, money = 0): JoinResult {
+  join(id: string, rawName: unknown, rawColor: unknown, saved: SavedProgress): JoinResult {
     if (this.players.size >= MAX_PLAYERS) return { ok: false, reason: "full" };
     const name = sanitizeName(rawName);
     if (!name) return { ok: false, reason: "invalidName" };
@@ -86,8 +94,9 @@ export class Room {
       ...this.findSpawn(),
       velocity: { x: 0, y: 0, z: 0 },
       anim: "idle",
-      fishCaught,
-      money,
+      fishCaught: saved.fishCaught,
+      money: saved.money,
+      outfit: { ...saved.outfit },
     };
     this.players.set(id, {
       snapshot,
@@ -264,6 +273,17 @@ export class Room {
     const money = Math.min(record.snapshot.money + amount, MAX_MONEY);
     record.snapshot = { ...record.snapshot, money };
     return money;
+  }
+
+  /** Roupas que o jogador veste, ou null se ele saiu. */
+  outfitOf(id: string): Outfit | null {
+    return this.players.get(id)?.snapshot.outfit ?? null;
+  }
+
+  /** Troca as roupas do jogador (a loja já cobrou). */
+  setOutfit(id: string, outfit: Outfit): void {
+    const record = this.players.get(id);
+    if (record) record.snapshot = { ...record.snapshot, outfit: { ...outfit } };
   }
 
   /** Escolhe um ponto na praça, longe dos outros jogadores, virado para a fonte. */

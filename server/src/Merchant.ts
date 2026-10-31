@@ -10,28 +10,10 @@ import {
 import { ITEM_IDS, ITEMS, type ItemId } from "@jogo/shared/items";
 import { forwardFromYaw, wrapAngle } from "@jogo/shared/math";
 import type { MerchantData, MerchantStock, SquareData, Vec3 } from "@jogo/shared/protocol";
+import { signSides } from "./Square.js";
 
 /** Raio (m) em volta do comerciante onde não nascem árvores. */
 export const MERCHANT_CLEAR_RADIUS = 4;
-
-/**
- * Direção (a partir do centro da praça) da barraca: o meio do maior dos dois vãos ao lado
- * da placa, entre ela e os bancos vizinhos. Assim a barraca fica do lado de quem chega do
- * centro do mapa e nenhum banco fica entre a fonte e a mesa.
- */
-function freeAngle(square: SquareData): number {
-  const { x: cx, z: cz } = square.position;
-  const angleOf = (p: Vec3) => Math.atan2(p.x - cx, p.z - cz);
-  const sign = angleOf(square.sign.position);
-  // Ângulo de cada banco medido a partir da placa, em (0, 2π).
-  const benches = square.benches.map((b) => {
-    const a = angleOf(b.position) - sign;
-    return a <= 0 ? a + Math.PI * 2 : a;
-  });
-  const after = Math.min(...benches, Math.PI * 2);
-  const before = Math.PI * 2 - Math.max(...benches, 0);
-  return wrapAngle(after >= before ? sign + after / 2 : sign - before / 2);
-}
 
 export class Merchant {
   readonly position: Vec3;
@@ -40,7 +22,8 @@ export class Merchant {
   private readonly stock: MerchantStock;
 
   constructor(square: SquareData) {
-    const angle = freeAngle(square);
+    // No lado mais largo da placa: nenhum banco fica entre a fonte e a mesa.
+    const angle = signSides(square).wide;
     const dist = SQUARE_RADIUS + MERCHANT_SQUARE_GAP;
     this.position = {
       x: square.position.x + Math.sin(angle) * dist,

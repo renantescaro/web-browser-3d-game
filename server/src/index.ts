@@ -8,12 +8,13 @@ import { SERVER_PORT, SQUARE_RADIUS, SQUARE_TREE_CLEARANCE, TICK_RATE } from "@j
 import { FISH_EATING_ANIMALS, type ClientToServerEvents, type ReactionId, type ServerToClientEvents } from "@jogo/shared/protocol";
 import { Room } from "./Room.js";
 import { generateAnimals } from "./Animals.js";
+import { ClothingShop } from "./ClothingShop.js";
 import { Merchant, MERCHANT_CLEAR_RADIUS } from "./Merchant.js";
 import { ShootingBooth } from "./ShootingBooth.js";
 import { ShootingGallery, type ShootingUpdate } from "./ShootingGallery.js";
 import { generateSquare } from "./Square.js";
 import { generateTrees } from "./Trees.js";
-import { parseFeedAnimal, parseJoin, parseShootingShot, parseState, parseTrade, RateLimiter } from "./validation.js";
+import { parseBuyOutfit, parseFeedAnimal, parseJoin, parseShootingShot, parseState, parseTrade, RateLimiter } from "./validation.js";
 
 const port = Number(process.env.PORT) || SERVER_PORT;
 const clientDist = normalize(join(dirname(fileURLToPath(import.meta.url)), "../../client/dist"));
@@ -58,10 +59,12 @@ const room = new Room(square.position);
 const merchant = new Merchant(square);
 const shootingBooth = new ShootingBooth(square);
 const shootingGallery = new ShootingGallery(shootingBooth, room);
+const clothingShop = new ClothingShop(square, room);
 const trees = generateTrees([
   { x: square.position.x, z: square.position.z, radius: SQUARE_RADIUS + SQUARE_TREE_CLEARANCE },
   { x: merchant.position.x, z: merchant.position.z, radius: MERCHANT_CLEAR_RADIUS },
   shootingBooth.clearArea(),
+  clothingShop.clearArea(),
 ]);
 console.log(
   `[servidor] praça gerada em (${square.position.x.toFixed(0)}, ${square.position.z.toFixed(0)}): ` +
@@ -83,6 +86,7 @@ io.on("connection", (socket) => {
   const feedLimiter = new RateLimiter(3, 3);
   const tradeLimiter = new RateLimiter(6, 6);
   const shootingLimiter = new RateLimiter(5, 8);
+  const outfitLimiter = new RateLimiter(4, 4);
 
   /** Manda ao jogador o estado do Tiro ao Alvo (e o dinheiro, se mudou); no fim, avisa todos. */
   const sendShooting = ({ state, money }: ShootingUpdate): void => {
@@ -97,7 +101,7 @@ io.on("connection", (socket) => {
     if (room.has(socket.id) || !joinLimiter.allow()) return;
     const msg = parseJoin(raw);
     if (!msg) return;
-    const result = room.join(socket.id, msg.name, msg.color, msg.fishCaught, msg.money);
+    const result = room.join(socket.id, msg.name, msg.color, msg);
     if (!result.ok) {
       console.log(`[sala] entrada recusada: ${result.reason}`);
       socket.emit("joinRejected", { reason: result.reason });
@@ -112,6 +116,7 @@ io.on("connection", (socket) => {
       square,
       merchant: merchant.toData(),
       shootingBooth: shootingBooth.toData(),
+      clothingShop: clothingShop.toData(),
     });
     socket.to("game").emit("playerJoined", { player: result.player });
     io.emit("lobby", lobbyMessage());
@@ -183,8 +188,19 @@ io.on("connection", (socket) => {
     shootingGallery.stop(socket.id);
   });
 
+  socket.on("buyOutfit", (raw: unknown) => {
+    if (!room.has(socket.id) || !outfitLimiter.allow()) return;
+    const msg = parseBuyOutfit(raw);
+    const sale = msg && clothingShop.sell(socket.id, msg.item);
+    if (!msg || !sale) return;
+    socket.emit("money", { amount: sale.money });
+    socket.emit("outfit", { outfit: sale.outfit });
+    io.to("game").emit("outfitSold", { playerId: socket.id, item: msg.item });
+  });
+
   socket.on("disconnect", () => {
     shootingGallery.stop(socket.id);
+    clothingShop.forget(socket.id);
     const left = room.leave(socket.id);
     if (!left) return;
     io.to("game").emit("playerLeft", { id: socket.id });

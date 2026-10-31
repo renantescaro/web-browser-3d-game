@@ -16,6 +16,7 @@ import {
   SQUARE_RADIUS,
   SQUARE_SIGN_TEXT,
 } from "@jogo/shared/constants";
+import { wrapAngle } from "@jogo/shared/math";
 import type { BenchData, FishData, SquareData } from "@jogo/shared/protocol";
 
 /** Distância da placa até a borda do piso (m). */
@@ -128,4 +129,26 @@ export function benchGaps(square: SquareData): BenchGap[] {
       return { center: sign + (start + end) / 2, width: end - start, hasSign: last };
     })
     .sort((a, b) => b.width - a.width);
+}
+
+/**
+ * Os dois lados da placa: o meio de cada vão entre ela e o banco vizinho (ângulos a partir do
+ * centro da praça), o mais largo primeiro. O comerciante fica no mais largo e a loja de
+ * roupas no outro; assim os dois ficam do lado de quem chega do centro do mapa.
+ */
+export function signSides(square: SquareData): { wide: number; narrow: number } {
+  const { x: cx, z: cz } = square.position;
+  const angleOf = (p: { x: number; z: number }) => Math.atan2(p.x - cx, p.z - cz);
+  const sign = angleOf(square.sign.position);
+  // Ângulo de cada banco medido a partir da placa, em (0, 2π).
+  const benches = square.benches.map((b) => {
+    const a = angleOf(b.position) - sign;
+    const wrapped = a % (Math.PI * 2);
+    return wrapped <= 0 ? wrapped + Math.PI * 2 : wrapped;
+  });
+  const after = Math.min(...benches, Math.PI * 2);
+  const before = Math.PI * 2 - Math.max(...benches, 0);
+  const afterSide = wrapAngle(sign + after / 2);
+  const beforeSide = wrapAngle(sign - before / 2);
+  return after >= before ? { wide: afterSide, narrow: beforeSide } : { wide: beforeSide, narrow: afterSide };
 }

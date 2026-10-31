@@ -2,6 +2,10 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
 import { io, type Socket } from "socket.io-client";
 import {
   ANIMAL_FOLLOW_DISTANCE,
+  CLOTHING_SELLER_NAME,
+  CLOTHING_SHOP_RANGE,
+  CLOTHING_SIGN_TEXT,
+  OUTFIT_BUY_COOLDOWN_MS,
   FISH_MAX_SCALE,
   FISH_MIN_SCALE,
   FOUNTAIN_MAX_FISH,
@@ -30,13 +34,16 @@ import {
   WORLD_HALF,
 } from "@jogo/shared/constants";
 import { ITEMS } from "@jogo/shared/items";
+import { OUTFIT_ITEMS, type Outfit } from "@jogo/shared/outfits";
 import type {
   AnimalSnapshot,
   AnimalType,
   ClientToServerEvents,
+  ClothingShopData,
   LobbyMessage,
   MerchantData,
   MerchantStock,
+  PlayerSnapshot,
   ServerToClientEvents,
   ShootingBoothData,
   ShootingResultMessage,
@@ -182,6 +189,12 @@ class FishBot {
   stocks: MerchantStock[] = [];
   merchant: MerchantData | null = null;
   shootingBooth: ShootingBoothData | null = null;
+  clothingShop: ClothingShopData | null = null;
+  outfits: Outfit[] = [];
+  outfitSales: string[] = [];
+  players: PlayerSnapshot[] = [];
+  /** Roupas informadas no `welcome`. */
+  initialOutfit: Outfit = {};
   shootingStates: ShootingStateMessage[] = [];
   shootingResults: ShootingResultMessage[] = [];
   /** Dinheiro informado no `welcome`. */
@@ -189,7 +202,12 @@ class FishBot {
   private readonly types = new Map<string, AnimalType>();
 
   private constructor(readonly socket: BotSocket) {
-    socket.on("snapshot", (msg) => (this.animals = msg.animals));
+    socket.on("snapshot", (msg) => {
+      this.animals = msg.animals;
+      this.players = msg.players;
+    });
+    socket.on("outfit", ({ outfit }) => this.outfits.push(outfit));
+    socket.on("outfitSold", ({ playerId }) => this.outfitSales.push(playerId));
     socket.on("fishCount", ({ count }) => this.fishCounts.push(count));
     socket.on("animalFed", ({ animalId }) => this.fedAnimals.push(animalId));
     socket.on("money", ({ amount }) => this.moneys.push(amount));
@@ -198,21 +216,23 @@ class FishBot {
     socket.on("shootingResult", (msg) => this.shootingResults.push(msg));
   }
 
-  static async join(name: string, color: string, fishCaught: number, money = 0): Promise<FishBot> {
+  static async join(name: string, color: string, fishCaught: number, money = 0, outfit?: unknown): Promise<FishBot> {
     const { socket } = await connectBot();
     const bot = new FishBot(socket);
     const welcome = await new Promise<Parameters<ServerToClientEvents["welcome"]>[0]>((resolve, reject) => {
       socket.once("welcome", resolve);
       socket.once("joinRejected", ({ reason }) => reject(new Error(`bot recusado: ${reason}`)));
-      socket.emit("join", { name, color, fishCaught, money });
+      socket.emit("join", { name, color, fishCaught, money, outfit: outfit as Outfit });
     });
     const self = welcome.players.find((p) => p.id === welcome.selfId);
     if (self) {
       bot.position = self.position;
       bot.initialMoney = self.money;
+      bot.initialOutfit = self.outfit;
     }
     bot.merchant = welcome.merchant;
     bot.shootingBooth = welcome.shootingBooth;
+    bot.clothingShop = welcome.clothingShop;
     for (const a of welcome.animals) bot.types.set(a.id, a.type);
     await expect.poll(() => bot.animals.length).toBe(welcome.animals.length);
     return bot;
@@ -622,6 +642,127 @@ test("comerciante pelo botão de Ação: Negociar abre o painel, vende e compra 
   await expect(panel).toBeHidden();
   await expect(action).toContainText("Negociar");
   await closeAll([page]);
+});
+
+/** Da praça até o balcão da Deendi. */
+async function walkToClothingShop(page: Page): Promise<void> {
+  const shop = await page.evaluate(() => window.__jogo!.clothing()!);
+  await walkAroundFountainTo(page, shop, customerSpot({ ...shop, table: shop.counter }));
+  // Pode chegar de lado (contornando a placa): vira para o balcão com um toque em W.
+  await page.evaluate(([x, z]) => window.__jogo!.lookAt(x, z), [shop.counter.x, shop.counter.z] as const);
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(80);
+  await page.keyboard.up("KeyW");
+}
+
+test("loja de roupas: compra e veste, troca na mesma parte do corpo, tudo validado no servidor", async () => {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const gap = OUTFIT_BUY_COOLDOWN_MS + 50;
+  const { topHat, cap, glasses, boots } = OUTFIT_ITEMS;
+  // Dá para as quatro compras, mas depois não sobra para a cartola de novo.
+  const start = topHat.price + glasses.price + boots.price + cap.price + 10;
+  const bot = await FishBot.join("Vaidoso", PLAYER_COLORS[8], 0, start);
+  const watcher = await FishBot.join("Olheiro", PLAYER_COLORS[9], 0, 0);
+  try {
+    const shop = bot.clothingShop!;
+    expect(shop.sellerName).toBe(CLOTHING_SELLER_NAME);
+    expect(shop.signText).toBe(CLOTHING_SIGN_TEXT);
+    expect(shop.appearance.outfit).toEqual({ head: "topHat", eyes: "glasses", feet: "boots" });
+    expect(bot.initialOutfit).toEqual({});
+
+    // Longe do balcão: recusado.
+    bot.socket.emit("buyOutfit", { item: "topHat" });
+    await wait(gap);
+    expect(bot.moneys).toEqual([]);
+
+    await bot.walkTo(() => customerSpot({ ...shop.position, table: shop.counter }), 0.3);
+    expect(Math.hypot(bot.position.x - shop.counter.x, bot.position.z - shop.counter.z)).toBeLessThan(CLOTHING_SHOP_RANGE);
+
+    // Item desconhecido é ignorado.
+    bot.socket.emit("buyOutfit", { item: "coroa" } as never);
+    await wait(gap);
+    expect(bot.moneys).toEqual([]);
+
+    // Cartola, óculos e bota ao mesmo tempo: cada um numa parte do corpo.
+    let money = start;
+    const expected: Outfit = {};
+    for (const [id, slot] of [["topHat", "head"], ["glasses", "eyes"], ["boots", "feet"]] as const) {
+      bot.socket.emit("buyOutfit", { item: id });
+      money -= OUTFIT_ITEMS[id].price;
+      expected[slot] = id;
+      await expect.poll(() => bot.moneys.at(-1)).toBe(money);
+      expect(bot.outfits.at(-1)).toEqual(expected);
+      await wait(gap);
+    }
+    expect(bot.outfitSales).toEqual([bot.id, bot.id, bot.id]);
+    // Todos veem as roupas no snapshot.
+    await expect.poll(() => watcher.players.find((p) => p.id === bot.id)?.outfit).toEqual(expected);
+
+    // Comprar de novo o que já veste não cobra.
+    bot.socket.emit("buyOutfit", { item: "topHat" });
+    await wait(gap);
+    expect(bot.moneys.at(-1)).toBe(money);
+
+    // Boné e cartola não vão juntos: o boné troca a cartola.
+    bot.socket.emit("buyOutfit", { item: "cap" });
+    money -= cap.price;
+    await expect.poll(() => bot.moneys.at(-1)).toBe(money);
+    expect(bot.outfits.at(-1)).toEqual({ head: "cap", eyes: "glasses", feet: "boots" });
+    await wait(gap);
+
+    // Sem dinheiro para a cartola: recusado.
+    expect(money).toBeLessThan(topHat.price);
+    bot.socket.emit("buyOutfit", { item: "topHat" });
+    await wait(gap);
+    expect(bot.moneys.at(-1)).toBe(money);
+    expect(bot.outfits.at(-1)?.head).toBe("cap");
+  } finally {
+    bot.socket.disconnect();
+    watcher.socket.disconnect();
+  }
+
+  // As roupas voltam no `join` (reconexão) e são validadas: item da parte errada ou desconhecido sai.
+  const back = await FishBot.join("Voltou", PLAYER_COLORS[8], 0, 0, { head: "cap", eyes: "topHat", feet: "boots", hands: "luva" });
+  expect(back.initialOutfit).toEqual({ head: "cap", feet: "boots" });
+  back.socket.disconnect();
+});
+
+test("loja de roupas pelo botão de Ação: abre o painel da Deendi e vê as roupas dos outros", async ({ browser }) => {
+  const page = await joinAs(browser, "Curioso", 1);
+  const action = page.getByTestId("action-label");
+  const panel = page.getByTestId("clothing-panel");
+  const bot = await FishBot.join("Elegante", PLAYER_COLORS[3], 0, OUTFIT_ITEMS.topHat.price);
+  try {
+    await walkToClothingShop(page);
+    await expect(action).toContainText("Comprar roupas");
+    await page.keyboard.press("KeyF");
+    await expect(panel).toBeVisible();
+    await expect(action).toContainText("Fechar");
+    await expect(panel).toContainText(CLOTHING_SELLER_NAME);
+    await expect(page.getByTestId("clothing-wallet")).toContainText("Vestindo: nada");
+    // Sem dinheiro: os botões mostram o preço, mas ficam desabilitados.
+    await expect(page.getByTestId("clothing-buy-topHat")).toHaveText(`Comprar R$ ${OUTFIT_ITEMS.topHat.price}`);
+    await expect(page.getByTestId("clothing-buy-topHat")).toBeDisabled();
+    await expect(page.getByTestId("clothing-buy-boots")).toBeDisabled();
+
+    // Outro jogador compra uma cartola: a Deendi comemora e todos o veem com ela.
+    const shop = bot.clothingShop!;
+    await bot.walkTo(() => customerSpot({ ...shop.position, table: shop.counter }), 0.3);
+    bot.socket.emit("buyOutfit", { item: "topHat" });
+    await expect.poll(() => bot.outfits.at(-1)).toEqual({ head: "topHat" });
+    await expect
+      .poll(() => page.evaluate((id) => window.__jogo!.remotes().find((r) => r.id === id)?.outfit, bot.id))
+      .toEqual({ head: "topHat" });
+    await expect(page.locator(".reaction-bubble--active", { hasText: "🛍️" })).toHaveCount(1);
+
+    // Q fecha o painel.
+    await page.keyboard.press("KeyQ");
+    await expect(panel).toBeHidden();
+    await expect(action).toContainText("Comprar roupas");
+  } finally {
+    bot.socket.disconnect();
+    await closeAll([page]);
+  }
 });
 
 /** Ponto de onde se joga o Tiro ao Alvo: à frente do balcão. */

@@ -8,7 +8,7 @@ import { distanceXZ, isFacingPoint } from "@jogo/shared/math";
 import type { ShootingPhase, ShootingStateMessage } from "@jogo/shared/protocol";
 import type { LocalPlayer } from "../entities/LocalPlayer";
 import type { Network } from "../net/Network";
-import { formatMoney } from "../ui/MerchantPanel";
+import { formatMoney } from "../ui/shopUi";
 import { ShootingPanel } from "../ui/ShootingPanel";
 import { ACTION_LABELS, type ActionHandler, type ActionLabel } from "./ActionResolver";
 import type { Intents } from "./Input";

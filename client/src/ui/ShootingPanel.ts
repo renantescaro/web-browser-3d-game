@@ -2,7 +2,7 @@
 // no centro da tela.
 import { SHOOTING_PRIZE, SHOOTING_TARGETS_TO_WIN } from "@jogo/shared/constants";
 import type { ShootingPhase } from "@jogo/shared/protocol";
-import { formatMoney } from "./MerchantPanel";
+import { formatMoney } from "./shopUi";
 
 /** O que o painel mostra. `lastShot` é o resultado do último tiro, visto no cliente. */
 export interface ShootingView {

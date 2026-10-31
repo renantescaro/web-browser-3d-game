@@ -249,3 +249,26 @@ export const AIM_CAMERA_DISTANCE = 2.2;
 export const AIM_CAMERA_SHOULDER = 0.6;
 /** Quão rápido a câmera entra/sai do modo de mira (1/s). */
 export const AIM_CAMERA_BLEND = 10;
+
+// --- Loja de roupas e acessórios (Deendi; itens e preços ficam em `outfits.ts`) ---
+export const CLOTHING_SELLER_NAME = "Deendi";
+/** Aparência da Deendi: veste os próprios produtos (cartola, óculos e botas). */
+export const CLOTHING_SELLER_APPEARANCE: CharacterAppearance = {
+  shirtColor: "#8e3b8f",
+  pantsColor: "#22223b",
+  skinColor: "#8d5a3b",
+  vestColor: "#f2c14e",
+  bowTieColor: "#e63946",
+  outfit: { head: "topHat", eyes: "glasses", feet: "boots" },
+};
+export const CLOTHING_SIGN_TEXT = "Roupas e Acessórios";
+/** Distância (m) da borda da praça até onde a Deendi fica, do lado de fora. */
+export const CLOTHING_SQUARE_GAP = 2.5;
+/** Distância (m) da Deendi até o centro do balcão, à frente dela. */
+export const CLOTHING_COUNTER_OFFSET = 0.9;
+/** Distância máxima (m) do jogador até o centro do balcão para comprar. */
+export const CLOTHING_SHOP_RANGE = 2.2;
+/** Abertura total (graus) do cone em que o jogador precisa estar olhando para o balcão. */
+export const CLOTHING_FACING_DEG = 100;
+/** Intervalo mínimo entre duas compras de roupa, conferido no servidor (ms). */
+export const OUTFIT_BUY_COOLDOWN_MS = 300;

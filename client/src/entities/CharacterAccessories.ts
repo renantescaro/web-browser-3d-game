@@ -17,14 +17,16 @@ const TORSO_Y = 1.2;
 const BOW_TIE = { y: 1.43, z: 0.2 };
 const BOATER_BAND_COLOR = 0x1d1d1d;
 
+/** Boné: copa arredondada e aba para a frente. Também é vendido pela Deendi. */
+export function buildCap(kit: AccessoryKit, mat: THREE.Material, head: THREE.Object3D): void {
+  const crown = kit.mesh(new THREE.SphereGeometry(HEAD_RADIUS + 0.012, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat, head);
+  crown.position.y = 0.03;
+  const brim = kit.mesh(new THREE.BoxGeometry(0.22, 0.02, 0.14), mat, head);
+  brim.position.set(0, 0.04, HEAD_RADIUS + 0.03);
+}
+
 const HATS: Record<HatStyle, (kit: AccessoryKit, mat: THREE.Material, head: THREE.Object3D) => void> = {
-  // Boné: copa arredondada e aba para a frente.
-  cap: (kit, mat, head) => {
-    const crown = kit.mesh(new THREE.SphereGeometry(HEAD_RADIUS + 0.012, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat, head);
-    crown.position.y = 0.03;
-    const brim = kit.mesh(new THREE.BoxGeometry(0.22, 0.02, 0.14), mat, head);
-    brim.position.set(0, 0.04, HEAD_RADIUS + 0.03);
-  },
+  cap: buildCap,
   // Chapéu de aba larga (palha).
   wide: (kit, mat, head) => {
     const brim = kit.mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.025, 24), mat, head);

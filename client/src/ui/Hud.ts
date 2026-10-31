@@ -2,7 +2,7 @@
 // aviso de conexão, avisos curtos e dica do mouse.
 // No celular (touchMode) não há ajuda de controles nem dica do mouse.
 import { MAX_PLAYERS } from "@jogo/shared/constants";
-import { formatMoney } from "./MerchantPanel";
+import { formatMoney } from "./shopUi";
 
 /** Por quanto tempo um aviso curto fica na tela (ms). */
 const NOTICE_MS = 2500;
@@ -77,7 +77,7 @@ export class Hud {
       help.dataset.testid = "controls-help";
       help.innerHTML =
         "<b>WASD</b> mover · <b>Shift</b> correr · <b>Espaço</b> pular<br>" +
-        "<b>Clique</b> ou <b>F</b> ação (bater/pescar/negociar/jogar) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
+        "<b>Clique</b> ou <b>F</b> ação (bater/pescar/negociar/comprar/jogar) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
       this.root.append(help);
     }
     container.appendChild(this.root);
