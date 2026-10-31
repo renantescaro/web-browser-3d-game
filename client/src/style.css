@@ -262,12 +262,6 @@ body {
   display: none;
 }
 
-/* No celular a ajuda fica no topo, longe do analógico e dos botões. */
-.hud-help-touch {
-  top: 12px;
-  bottom: auto;
-}
-
 /* ---------- Controles de toque ---------- */
 .touch-controls {
   position: absolute;

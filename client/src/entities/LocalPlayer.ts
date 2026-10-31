@@ -52,7 +52,7 @@ export class LocalPlayer {
     scene: THREE.Scene,
     name: string,
     color: string,
-    spawn: Vec3,
+    private readonly spawn: Vec3,
     rotationY: number,
   ) {
     this.character = new Character(name, color);
@@ -137,9 +137,11 @@ export class LocalPlayer {
     if (this.curr.y < FALL_LIMIT) this.respawn();
   }
 
+  /** Caiu do mapa: volta ao ponto onde nasceu (na praça). */
   private respawn(): void {
-    this.body.setTranslation({ x: 0, y: CAPSULE_CENTER_Y + 2, z: 0 }, true);
-    this.curr.set(0, 2, 0);
+    const { x, z } = this.spawn;
+    this.body.setTranslation({ x, y: CAPSULE_CENTER_Y + 2, z }, true);
+    this.curr.set(x, 2, z);
     this.prev.copy(this.curr);
     this.verticalSpeed = 0;
     this.knockback.set(0, 0, 0);

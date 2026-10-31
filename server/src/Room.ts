@@ -16,7 +16,8 @@ import {
   PUNCH_CONE_DEG,
   PUNCH_COOLDOWN_MS,
   PUNCH_RANGE,
-  SPAWN_RADIUS,
+  SPAWN_MAX_DISTANCE,
+  SPAWN_MIN_DISTANCE,
   TRADE_COOLDOWN_MS,
 } from "@jogo/shared/constants";
 import { ITEMS, type ItemId } from "@jogo/shared/items";
@@ -53,6 +54,9 @@ export type JoinResult = { ok: true; player: PlayerSnapshot } | { ok: false; rea
 export class Room {
   private readonly players = new Map<string, PlayerRecord>();
 
+  /** `spawnCenter`: centro da praça (a fonte); todos nascem em volta dela. */
+  constructor(private readonly spawnCenter: { x: number; z: number }) {}
+
   get playerCount(): number {
     return this.players.size;
   }
@@ -79,8 +83,7 @@ export class Room {
       id,
       name,
       color: rawColor,
-      position: this.findSpawn(),
-      rotationY: Math.random() * Math.PI * 2,
+      ...this.findSpawn(),
       velocity: { x: 0, y: 0, z: 0 },
       anim: "idle",
       fishCaught,
@@ -263,19 +266,17 @@ export class Room {
     return money;
   }
 
-  /** Escolhe um ponto de nascimento longe dos outros jogadores. */
-  private findSpawn(): Vec3 {
-    let candidate: Vec3 = { x: 0, y: 0, z: 0 };
+  /** Escolhe um ponto na praça, longe dos outros jogadores, virado para a fonte. */
+  private findSpawn(): { position: Vec3; rotationY: number } {
+    const { x: cx, z: cz } = this.spawnCenter;
+    let position: Vec3 = { x: cx, y: 0, z: cz + SPAWN_MIN_DISTANCE };
     for (let attempt = 0; attempt < 20; attempt++) {
       const angle = Math.random() * Math.PI * 2;
-      const r = Math.random() * SPAWN_RADIUS;
-      candidate = { x: Math.cos(angle) * r, y: 0, z: Math.sin(angle) * r };
-      const free = [...this.players.values()].every((p) => {
-        const pos = p.snapshot.position;
-        return Math.hypot(pos.x - candidate.x, pos.z - candidate.z) > PLAYER_RADIUS * 4;
-      });
+      const r = SPAWN_MIN_DISTANCE + Math.random() * (SPAWN_MAX_DISTANCE - SPAWN_MIN_DISTANCE);
+      position = { x: cx + Math.sin(angle) * r, y: 0, z: cz + Math.cos(angle) * r };
+      const free = [...this.players.values()].every((p) => distanceXZ(p.snapshot.position, position) > PLAYER_RADIUS * 4);
       if (free) break;
     }
-    return candidate;
+    return { position, rotationY: Math.atan2(cx - position.x, cz - position.z) };
   }
 }

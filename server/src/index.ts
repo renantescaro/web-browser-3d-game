@@ -51,10 +51,10 @@ const httpServer = createServer(serveStatic);
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: { origin: true },
 });
-const room = new Room();
 const animals = generateAnimals();
 // A praça é gerada antes das árvores para que elas não nasçam em cima dela.
 const square = generateSquare();
+const room = new Room(square.position);
 const merchant = new Merchant(square);
 const shootingBooth = new ShootingBooth(square);
 const shootingGallery = new ShootingGallery(shootingBooth, room);

@@ -18,6 +18,8 @@ import {
   SHOOTING_SHOT_COOLDOWN_MS,
   SHOOTING_SIGN_TEXT,
   SHOOTING_TARGETS_TO_WIN,
+  SPAWN_MAX_DISTANCE,
+  SPAWN_MIN_DISTANCE,
   SQUARE_MAX_BENCHES,
   SQUARE_MIN_BENCHES,
   SQUARE_RADIUS,
@@ -107,6 +109,27 @@ async function walkTo(page: Page, x: number, z: number, within: number): Promise
   );
   await page.keyboard.up("KeyW");
   await page.keyboard.up("ShiftLeft");
+}
+
+/**
+ * Todos nascem na praça olhando para a fonte. Gira a câmera para um ponto mais à frente no anel
+ * entre a fonte e os bancos, para "W" andar alguns metros sem bater em nada.
+ */
+async function faceAlongFountain(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const api = window.__jogo!;
+    const { x: fx, z: fz } = api.square()!.fountain;
+    const me = api.local();
+    const start = Math.atan2(me.x - fx, me.z - fz);
+    const point = (turn: number) => ({ x: fx + Math.sin(start + turn) * 4.8, z: fz + Math.cos(start + turn) * 4.8 });
+    // Vai para o lado mais longe dos outros jogadores (que também nascem no anel).
+    const clearance = (turn: number) => {
+      const p = point(turn);
+      return Math.min(Infinity, ...api.remotes().map((r) => Math.hypot(r.x - (me.x + p.x) / 2, r.z - (me.z + p.z) / 2)));
+    };
+    const target = clearance(1.2) >= clearance(-1.2) ? point(1.2) : point(-1.2);
+    api.lookAt(target.x, target.z);
+  });
 }
 
 async function closeAll(pages: Page[]): Promise<void> {
@@ -244,6 +267,21 @@ test("entra com nome e cor e vê o mundo", async ({ browser }) => {
   await expect(page.locator("canvas")).toBeVisible();
   await expect(page.locator(".name-label", { hasText: "Ana" })).toBeVisible();
   await expect(page.getByTestId("online-count")).toHaveText(`1/${MAX_PLAYERS} online`);
+
+  // Nasce na praça, entre a fonte e os bancos, de frente para a fonte.
+  const spawn = await page.evaluate(() => {
+    const api = window.__jogo!;
+    const { x: fx, z: fz } = api.square()!.fountain;
+    const me = api.local();
+    const toFountain = Math.atan2(fx - me.x, fz - me.z);
+    return {
+      distance: Math.hypot(me.x - fx, me.z - fz),
+      turn: Math.abs(Math.atan2(Math.sin(toFountain - me.rotationY), Math.cos(toFountain - me.rotationY))),
+    };
+  });
+  expect(spawn.distance).toBeGreaterThan(SPAWN_MIN_DISTANCE - 0.1);
+  expect(spawn.distance).toBeLessThan(SPAWN_MAX_DISTANCE + 0.1);
+  expect(spawn.turn).toBeLessThan(0.05);
   await closeAll([page]);
 });
 
@@ -782,8 +820,18 @@ test("vê outro jogador se movendo", async ({ browser }) => {
   const start = await remoteAna();
   expect(start).toBeDefined();
 
+  await faceAlongFountain(ana);
+  // Segura W até andar uns metros (no headless o FPS da praça é baixo, então o tempo varia).
+  const origin = await ana.evaluate(() => window.__jogo!.local());
   await ana.keyboard.down("KeyW");
-  await ana.waitForTimeout(1000);
+  await ana.waitForFunction(
+    ([x, z]) => {
+      const p = window.__jogo!.local();
+      return Math.hypot(p.x - x, p.z - z) > 2.5;
+    },
+    [origin.x, origin.z] as const,
+    { timeout: 10_000 },
+  );
   await ana.keyboard.up("KeyW");
 
   await expect
@@ -897,13 +945,14 @@ test("no celular mostra controles de toque e o analógico move", async ({ browse
   await page.getByRole("button", { name: "Entrar" }).tap();
   await page.waitForFunction(() => window.__jogo !== undefined);
   await expect(page.getByTestId("touch-stick")).toBeVisible();
-  await expect(page.getByTestId("controls-help")).toContainText("Analógico");
+  await expect(page.getByTestId("controls-help")).toHaveCount(0);
 
   // Arrasta o analógico para cima, até a borda (corre para frente).
   const box = await page.getByTestId("touch-stick").boundingBox();
   if (!box) throw new Error("analógico sem posição");
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
+  await faceAlongFountain(page);
   const cdp = await context.newCDPSession(page);
   const before = await page.evaluate(() => window.__jogo?.local());
   await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y, id: 1 }] });

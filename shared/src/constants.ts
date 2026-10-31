@@ -30,7 +30,6 @@ export type PlayerColor = (typeof PLAYER_COLORS)[number];
 // --- Mundo ---
 export const WORLD_SIZE = 200;
 export const WORLD_HALF = WORLD_SIZE / 2;
-export const SPAWN_RADIUS = 6;
 
 // --- Física / movimento ---
 export const PHYSICS_HZ = 60;
@@ -128,7 +127,7 @@ export const REACTION_DURATION_MS = 2500;
 // --- Praça da Cidade ---
 /** Raio do piso de pedra da praça (m). */
 export const SQUARE_RADIUS = 11;
-/** Faixa de distância do centro do mapa (onde os jogadores nascem) até o centro da praça (m). */
+/** Faixa de distância do centro do mapa até o centro da praça (m). */
 export const SQUARE_MIN_DISTANCE = 30;
 export const SQUARE_MAX_DISTANCE = 45;
 /** Folga extra ao redor da praça onde não nascem árvores (m). */
@@ -145,6 +144,12 @@ export const SQUARE_BENCH_RING = 6.5;
 export const FOUNTAIN_RADIUS = 2.6;
 export const FOUNTAIN_WALL_HEIGHT = 0.6;
 export const FOUNTAIN_WALL_THICKNESS = 0.3;
+/**
+ * Os jogadores nascem na praça, de frente para a fonte, num anel entre ela e os bancos (m, a partir do
+ * centro). O mínimo fica fora do alcance da pesca, para a Ação não começar como "Pescar".
+ */
+export const SPAWN_MIN_DISTANCE = 4.3;
+export const SPAWN_MAX_DISTANCE = 5.4;
 /** Raio da coluna central da fonte (m). */
 export const FOUNTAIN_PILLAR_RADIUS = 0.35;
 /** Quantidade de peixes sorteada entre estes valores (inclusive). */

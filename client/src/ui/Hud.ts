@@ -1,6 +1,6 @@
 // HUD: contador "X/10 online", peixes pescados, dinheiro, ação atual, botão da música, ajuda de controles,
 // aviso de conexão, avisos curtos e dica do mouse.
-// No celular (touchMode) a ajuda descreve os controles de toque e não há dica do mouse.
+// No celular (touchMode) não há ajuda de controles nem dica do mouse.
 import { MAX_PLAYERS } from "@jogo/shared/constants";
 import { formatMoney } from "./MerchantPanel";
 
@@ -65,18 +65,21 @@ export class Hud {
     this.hint.textContent = "Clique na tela para controlar a câmera";
     this.hint.hidden = touchMode;
 
-    const help = document.createElement("div");
-    help.className = touchMode ? "hud-help hud-help-touch" : "hud-help";
-    help.dataset.testid = "controls-help";
-    help.innerHTML = touchMode
-      ? "<b>Analógico</b> mover (até a borda: correr)<br><b>Arraste a tela</b> câmera · <b>Ação</b> bater, pescar, negociar ou jogar · <b>😊😢😠💡</b> reações"
-      : "<b>WASD</b> mover · <b>Shift</b> correr · <b>Espaço</b> pular<br>" +
-        "<b>Clique</b> ou <b>F</b> ação (bater/pescar/negociar/jogar) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
-
     const topRight = document.createElement("div");
     topRight.className = "hud-top-right";
     topRight.append(this.musicButton, this.fishCount, this.money, this.online);
-    this.root.append(topRight, this.status, this.notice, this.hint, this.action, help);
+    this.root.append(topRight, this.status, this.notice, this.hint, this.action);
+
+    // A ajuda de teclas só aparece no computador; no celular os botões já se explicam.
+    if (!touchMode) {
+      const help = document.createElement("div");
+      help.className = "hud-help";
+      help.dataset.testid = "controls-help";
+      help.innerHTML =
+        "<b>WASD</b> mover · <b>Shift</b> correr · <b>Espaço</b> pular<br>" +
+        "<b>Clique</b> ou <b>F</b> ação (bater/pescar/negociar/jogar) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
+      this.root.append(help);
+    }
     container.appendChild(this.root);
   }
 
