@@ -8,6 +8,9 @@ import {
   FOUNTAIN_PILLAR_RADIUS,
   FOUNTAIN_RADIUS,
   FOUNTAIN_WALL_THICKNESS,
+  PLAYER_RADIUS,
+  SPAWN_MAX_DISTANCE,
+  SPAWN_MIN_DISTANCE,
   SQUARE_BENCH_RING,
   SQUARE_MAX_BENCHES,
   SQUARE_MAX_DISTANCE,
@@ -16,8 +19,8 @@ import {
   SQUARE_RADIUS,
   SQUARE_SIGN_TEXT,
 } from "@jogo/shared/constants";
-import { wrapAngle } from "@jogo/shared/math";
-import type { BenchData, FishData, SquareData } from "@jogo/shared/protocol";
+import { distanceXZ, wrapAngle } from "@jogo/shared/math";
+import type { BenchData, FishData, SquareData, Vec3 } from "@jogo/shared/protocol";
 
 /** Distância da placa até a borda do piso (m). */
 const SIGN_INSET = 1.2;
@@ -151,4 +154,45 @@ export function signSides(square: SquareData): { wide: number; narrow: number } 
   const afterSide = wrapAngle(sign + after / 2);
   const beforeSide = wrapAngle(sign - before / 2);
   return after >= before ? { wide: afterSide, narrow: beforeSide } : { wide: beforeSide, narrow: afterSide };
+}
+
+/** Menor diferença entre dois ângulos, em [0, π]. */
+function angleBetween(a: number, b: number): number {
+  return Math.abs(wrapAngle(a - b));
+}
+
+/**
+ * O ângulo (a partir do centro da praça) mais longe de tudo o que já está em volta dela: placa,
+ * bancos e as barracas em `occupied`. Fica no meio de um vão entre bancos, com caminho livre até
+ * a fonte. Usado pela loja de ferramentas, a última a escolher lugar.
+ */
+export function quietestSide(square: SquareData, occupied: readonly { x: number; z: number }[]): number {
+  const { x: cx, z: cz } = square.position;
+  const angleOf = (p: { x: number; z: number }) => Math.atan2(p.x - cx, p.z - cz);
+  const taken = [square.sign.position, ...square.benches.map((b) => b.position), ...occupied].map(angleOf);
+  const samples = 360;
+  let best = 0;
+  let bestClearance = -1;
+  for (let i = 0; i < samples; i++) {
+    const angle = (i / samples) * Math.PI * 2;
+    const clearance = Math.min(...taken.map((t) => angleBetween(angle, t)));
+    if (clearance > bestClearance) {
+      best = angle;
+      bestClearance = clearance;
+    }
+  }
+  return wrapAngle(best);
+}
+
+/** Onde um jogador nasce: um ponto na praça, longe dos `others`, virado para a fonte (`center`). */
+export function findSpawn(center: { x: number; z: number }, others: readonly Vec3[]): { position: Vec3; rotationY: number } {
+  const { x: cx, z: cz } = center;
+  let position: Vec3 = { x: cx, y: 0, z: cz + SPAWN_MIN_DISTANCE };
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = SPAWN_MIN_DISTANCE + Math.random() * (SPAWN_MAX_DISTANCE - SPAWN_MIN_DISTANCE);
+    position = { x: cx + Math.sin(angle) * r, y: 0, z: cz + Math.cos(angle) * r };
+    if (others.every((p) => distanceXZ(p, position) > PLAYER_RADIUS * 4)) break;
+  }
+  return { position, rotationY: Math.atan2(cx - position.x, cz - position.z) };
 }

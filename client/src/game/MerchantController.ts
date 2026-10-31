@@ -10,6 +10,7 @@ import { MerchantPanel } from "../ui/MerchantPanel";
 import { ACTION_LABELS, type ActionHandler, type ActionLabel } from "./ActionResolver";
 import type { Intents } from "./Input";
 import type { MerchantManager } from "./MerchantManager";
+import type { PlayerInventory } from "./PlayerInventory";
 
 /** Folga extra (m) antes de o painel fechar sozinho porque o jogador foi empurrado para longe. */
 const LEAVE_SLACK = 0.8;
@@ -42,8 +43,7 @@ export class MerchantController implements ActionHandler {
     private readonly local: LocalPlayer,
     private readonly merchant: MerchantManager,
     private readonly network: Network,
-    /** Quanto o jogador tem de cada item (o peixe vem do `FishingController`). */
-    private readonly owned: (item: ItemId) => number,
+    private readonly inventory: PlayerInventory,
   ) {
     this.panel = new MerchantPanel(container, touchMode);
     this.panel.onExit = () => this.close();
@@ -119,15 +119,16 @@ export class MerchantController implements ActionHandler {
       merchantName: this.merchant.data?.name ?? "",
       stock: this.stock,
       money: this.money,
-      owned: this.owned,
+      owned: (item) => this.inventory.count(item),
+      room: (item) => this.inventory.canAdd(item),
     });
   }
 
-  /** O servidor confere e responde com `fishCount`, `money` e `merchantStock`. */
+  /** O servidor confere e responde com `inventory`, `money` e `merchantStock`. */
   private trade(item: ItemId, action: TradeAction): void {
     const { price } = ITEMS[item];
-    if (action === "buy" && (this.stock[item] <= 0 || this.money < price.buy)) return;
-    if (action === "sell" && this.owned(item) <= 0) return;
+    if (action === "buy" && (this.stock[item] <= 0 || this.money < price.buy || !this.inventory.canAdd(item))) return;
+    if (action === "sell" && this.inventory.count(item) <= 0) return;
     this.network.trade(item, action);
   }
 

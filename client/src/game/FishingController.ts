@@ -1,6 +1,6 @@
 // Pesca na fonte: detecta se o jogador está de frente para ela, abre/fecha o minigame,
-// mostra a vara e manda os peixes pescados ao servidor. Guarda a contagem de peixes
-// (o inventário de peixes do jogador).
+// mostra a vara e manda os peixes pescados ao servidor (que os põe no inventário). Com o
+// inventário cheio, avisa e não deixa pescar.
 import { FISHING_FACING_DEG, FISHING_REACH, FOUNTAIN_RADIUS } from "@jogo/shared/constants";
 import { distanceXZ, isFacingFountain } from "@jogo/shared/math";
 import type { LocalPlayer } from "../entities/LocalPlayer";
@@ -9,6 +9,7 @@ import { FishingPanel } from "../ui/FishingPanel";
 import { FishingMinigame, type FishingPhase } from "./FishingMinigame";
 import { ACTION_LABELS, type ActionHandler, type ActionLabel } from "./ActionResolver";
 import type { Intents } from "./Input";
+import { INVENTORY_FULL_NOTICE, type PlayerInventory } from "./PlayerInventory";
 import type { SquareManager } from "./SquareManager";
 
 /** Folga extra (m) antes de o minigame fechar sozinho porque o jogador foi empurrado para longe. */
@@ -25,12 +26,11 @@ export interface FishingDebugInfo {
 }
 
 export class FishingController implements ActionHandler {
-  /** Avisado quando a contagem de peixes muda. */
-  onCount: ((count: number) => void) | null = null;
+  /** Aviso curto na tela (ex.: inventário cheio). */
+  onNotice: ((text: string) => void) | null = null;
 
   private readonly panel: FishingPanel;
   private minigame: FishingMinigame | null = null;
-  private count = 0;
 
   constructor(
     container: HTMLElement,
@@ -38,6 +38,7 @@ export class FishingController implements ActionHandler {
     private readonly local: LocalPlayer,
     private readonly square: SquareManager,
     private readonly network: Network,
+    private readonly inventory: PlayerInventory,
   ) {
     this.panel = new FishingPanel(container, touchMode);
     this.panel.onExit = () => this.stop();
@@ -47,15 +48,9 @@ export class FishingController implements ActionHandler {
     return this.minigame !== null;
   }
 
-  get fishCount(): number {
-    return this.count;
-  }
-
-  /** Contagem vinda do servidor (welcome ou `fishCount`). */
-  setCount(count: number): void {
-    this.count = count;
-    this.network.rememberFishCaught(count);
-    this.onCount?.(count);
+  /** Peixes no inventário (a dificuldade do minigame cresce com eles). */
+  private get count(): number {
+    return this.inventory.count("fish");
   }
 
   /** O jogador está de frente para a fonte, perto o bastante para pescar? */
@@ -73,7 +68,15 @@ export class FishingController implements ActionHandler {
       if (intents.cancel || moving || this.pushedAway()) {
         this.stop();
       } else {
-        if (this.minigame.update(dt)) this.minigame.newRound(this.count);
+        if (this.minigame.update(dt)) {
+          // Encheu o inventário com o último peixe: não dá para pescar mais.
+          if (!this.inventory.canAdd("fish")) {
+            this.stop();
+            this.onNotice?.(INVENTORY_FULL_NOTICE);
+            return;
+          }
+          this.minigame.newRound(this.count);
+        }
         this.panel.render(this.minigame);
       }
     }
@@ -87,7 +90,8 @@ export class FishingController implements ActionHandler {
   /** Fisga (no minigame) ou começa a pescar. */
   act(): void {
     if (!this.minigame) {
-      this.start();
+      if (this.inventory.canAdd("fish")) this.start();
+      else this.onNotice?.(INVENTORY_FULL_NOTICE);
       return;
     }
     if (this.minigame.press() === "caught") this.network.catchFish();

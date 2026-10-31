@@ -8,7 +8,9 @@
     "./constants": "./src/constants.ts",
     "./math": "./src/math.ts",
     "./items": "./src/items.ts",
-    "./outfits": "./src/outfits.ts"
+    "./outfits": "./src/outfits.ts",
+    "./tools": "./src/tools.ts",
+    "./inventory": "./src/inventory.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

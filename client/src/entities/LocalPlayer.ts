@@ -17,7 +17,7 @@ import { CAPSULE_CENTER_Y, type Physics } from "../game/Physics";
 import { Character } from "./Character";
 
 /** Animações de quem está parado fazendo algo (com a vara ou a espingarda na mão). */
-export type Stance = Extract<AnimState, "fish" | "aim">;
+export type Stance = Extract<AnimState, "fish" | "aim" | "chop">;
 
 /** Por quanto tempo um pulo apertado um pouco antes de tocar o chão continua valendo (s). */
 const JUMP_BUFFER = 0.12;
@@ -44,7 +44,7 @@ export class LocalPlayer {
   private jumpBuffer = 0;
   private punchTimer = 0;
   private lastPunchAt = -Infinity;
-  /** Parado numa atividade (pescando ou mirando): a animação vira essa. */
+  /** Parado numa atividade (pescando, mirando ou cortando árvore): a animação vira essa. */
   stance: Stance | null = null;
 
   constructor(
@@ -139,7 +139,11 @@ export class LocalPlayer {
 
   /** Caiu do mapa: volta ao ponto onde nasceu (na praça). */
   private respawn(): void {
-    const { x, z } = this.spawn;
+    this.placeAt(this.spawn.x, this.spawn.z);
+  }
+
+  /** Põe o personagem em (x, z), um pouco acima do chão, parado. */
+  placeAt(x: number, z: number): void {
     this.body.setTranslation({ x, y: CAPSULE_CENTER_Y + 2, z }, true);
     this.curr.set(x, 2, z);
     this.prev.copy(this.curr);

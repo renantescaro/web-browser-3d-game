@@ -1,7 +1,9 @@
 // Conexão Socket.IO tipada com o protocolo compartilhado.
 import { io, type Socket } from "socket.io-client";
 import type { ItemId } from "@jogo/shared/items";
+import type { Inventory } from "@jogo/shared/inventory";
 import type { Outfit, OutfitItemId } from "@jogo/shared/outfits";
+import type { ToolId } from "@jogo/shared/tools";
 import type {
   ClientToServerEvents,
   JoinMessage,
@@ -39,9 +41,19 @@ export class Network {
     this.session = msg;
   }
 
-  /** Atualiza a contagem de peixes da sessão, reenviada no `join` ao reconectar. */
-  rememberFishCaught(count: number): void {
-    if (this.session) this.session = { ...this.session, fishCaught: count };
+  /** Atualiza o inventário da sessão, reenviado no `join` ao reconectar. */
+  rememberInventory(inventory: Inventory): void {
+    if (this.session) this.session = { ...this.session, inventory: { ...inventory } };
+  }
+
+  /**
+   * Só para testes (API de debug): reconecta reenviando o progresso com estes valores, como se o
+   * jogador tivesse voltado depois de uma queda. O servidor valida tudo no `join`.
+   */
+  rejoin(progress: Pick<JoinMessage, "money" | "inventory">): void {
+    if (!this.session) return;
+    this.session = { ...this.session, ...progress };
+    this.socket.disconnect().connect();
   }
 
   /** Atualiza o dinheiro da sessão, reenviado no `join` ao reconectar. */
@@ -52,6 +64,16 @@ export class Network {
   /** Atualiza as roupas da sessão, reenviadas no `join` ao reconectar. */
   rememberOutfit(outfit: Outfit): void {
     if (this.session) this.session = { ...this.session, outfit: { ...outfit } };
+  }
+
+  /** Vende madeira ao Brenno; o servidor confere e responde com `money` e `inventory`. */
+  sellWood(amount: number): void {
+    if (this.socket.connected) this.socket.emit("sellWood", { amount });
+  }
+
+  /** Compra uma ferramenta do Gabriel; o servidor confere e responde com `money` e `inventory`. */
+  buyTool(item: ToolId): void {
+    if (this.socket.connected) this.socket.emit("buyTool", { item });
   }
 
   /** Compra (e veste) uma roupa da Deendi; o servidor confere e responde com `money` e `outfit`. */
@@ -79,12 +101,17 @@ export class Network {
     if (this.socket.connected) this.socket.emit("shootingStop", {});
   }
 
-  /** Avisa que acertou o minigame de pesca; o servidor confere e responde com `fishCount`. */
+  /** Derrubou uma árvore no minigame; o servidor confere e responde com `inventory` e `treeChopped`. */
+  chopTree(treeId: string): void {
+    if (this.socket.connected) this.socket.emit("chopTree", { treeId });
+  }
+
+  /** Avisa que acertou o minigame de pesca; o servidor confere e responde com `inventory`. */
   catchFish(): void {
     if (this.socket.connected) this.socket.emit("fishCaught", {});
   }
 
-  /** Dá um peixe a um animal; o servidor confere e responde com `fishCount` e `animalFed`. */
+  /** Dá um peixe a um animal; o servidor confere e responde com `inventory` e `animalFed`. */
   feedAnimal(animalId: string): void {
     if (this.socket.connected) this.socket.emit("feedAnimal", { animalId });
   }

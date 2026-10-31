@@ -1,7 +1,9 @@
-// HUD: contador "X/10 online", peixes pescados, dinheiro, ação atual, botão da música, ajuda de controles,
+// HUD: contador "X/10 online", dinheiro, inventário, ação atual, botão da música, ajuda de controles,
 // aviso de conexão, avisos curtos e dica do mouse.
 // No celular (touchMode) não há ajuda de controles nem dica do mouse.
 import { MAX_PLAYERS } from "@jogo/shared/constants";
+import type { Inventory } from "@jogo/shared/inventory";
+import { InventoryBar } from "./InventoryBar";
 import { formatMoney } from "./shopUi";
 
 /** Por quanto tempo um aviso curto fica na tela (ms). */
@@ -13,8 +15,8 @@ export class Hud {
   private readonly status = document.createElement("div");
   private readonly hint = document.createElement("div");
   private readonly musicButton = document.createElement("button");
-  private readonly fishCount = document.createElement("div");
   private readonly money = document.createElement("div");
+  private readonly inventory = new InventoryBar();
   private readonly action = document.createElement("div");
   private readonly notice = document.createElement("div");
   private noticeTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -42,11 +44,6 @@ export class Hud {
       this.onMusicToggle?.();
     });
 
-    this.fishCount.className = "hud-fish";
-    this.fishCount.dataset.testid = "fish-count";
-    this.fishCount.title = "Peixes pescados";
-    this.setFishCount(0);
-
     this.money.className = "hud-money";
     this.money.dataset.testid = "money";
     this.money.title = "Dinheiro";
@@ -67,8 +64,8 @@ export class Hud {
 
     const topRight = document.createElement("div");
     topRight.className = "hud-top-right";
-    topRight.append(this.musicButton, this.fishCount, this.money, this.online);
-    this.root.append(topRight, this.status, this.notice, this.hint, this.action);
+    topRight.append(this.musicButton, this.money, this.online);
+    this.root.append(topRight, this.inventory.root, this.status, this.notice, this.hint, this.action);
 
     // A ajuda de teclas só aparece no computador; no celular os botões já se explicam.
     if (!touchMode) {
@@ -77,7 +74,7 @@ export class Hud {
       help.dataset.testid = "controls-help";
       help.innerHTML =
         "<b>WASD</b> mover · <b>Shift</b> correr · <b>Espaço</b> pular<br>" +
-        "<b>Clique</b> ou <b>F</b> ação (bater/pescar/negociar/comprar/jogar) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
+        "<b>Clique</b> ou <b>F</b> ação (bater/pescar/cortar/negociar/comprar/vender/jogar) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
       this.root.append(help);
     }
     container.appendChild(this.root);
@@ -87,12 +84,12 @@ export class Hud {
     this.online.textContent = `${count}/${MAX_PLAYERS} online`;
   }
 
-  setFishCount(count: number): void {
-    this.fishCount.textContent = `🐟 ${count}`;
-  }
-
   setMoney(amount: number): void {
     this.money.textContent = `💰 ${formatMoney(amount)}`;
+  }
+
+  setInventory(inventory: Inventory): void {
+    this.inventory.render(inventory);
   }
 
   /** Mostra o que o botão de Ação faz agora (ex.: "Bater", "Pescar"). */

@@ -1,4 +1,5 @@
-// Estado da sala: entrada/saída, limite de jogadores, cores únicas, estados, socos, dinheiro e roupas.
+// Estado da sala: entrada/saída, limite de jogadores, cores únicas, estados, socos, dinheiro,
+// roupas e inventário.
 import {
   FEED_COOLDOWN_MS,
   FEED_RANGE,
@@ -7,7 +8,6 @@ import {
   FOUNTAIN_RADIUS,
   KNOCKBACK_HORIZONTAL,
   MERCHANT_TRADE_RANGE,
-  MAX_FISH_CAUGHT,
   KNOCKBACK_UP,
   MAX_MONEY,
   MAX_PLAUSIBLE_SPEED,
@@ -16,15 +16,15 @@ import {
   PUNCH_CONE_DEG,
   PUNCH_COOLDOWN_MS,
   PUNCH_RANGE,
-  SPAWN_MAX_DISTANCE,
-  SPAWN_MIN_DISTANCE,
   TRADE_COOLDOWN_MS,
 } from "@jogo/shared/constants";
-import { ITEMS, type ItemId } from "@jogo/shared/items";
+import { canAdd, countOf, withItem, type Inventory } from "@jogo/shared/inventory";
+import { ITEMS } from "@jogo/shared/items";
 import type { Outfit } from "@jogo/shared/outfits";
 import type { HitMessage, JoinRejectReason, PlayerSnapshot, StateMessage, TradeMessage, Vec3 } from "@jogo/shared/protocol";
 import { distanceXZ, forwardFromYaw } from "@jogo/shared/math";
 import type { Merchant } from "./Merchant.js";
+import { findSpawn } from "./Square.js";
 import { clampToWorld, isValidColor, sanitizeName } from "./validation.js";
 
 interface PlayerRecord {
@@ -36,11 +36,6 @@ interface PlayerRecord {
   lastTradeAt: number;
 }
 
-/** Onde cada item fica guardado no jogador e quanto ele pode ter. Item novo: mapeie aqui. */
-const INVENTORY: Record<ItemId, { field: "fishCaught"; max: number }> = {
-  fish: { field: "fishCaught", max: MAX_FISH_CAUGHT },
-};
-
 /** Folga (m) na distância até a fonte, pela latência entre o cliente e o último `state`. */
 const FISHING_DISTANCE_SLACK = 1.5;
 /** Folga (m) na distância até o animal (latência + interpolação do animal no cliente). */
@@ -48,13 +43,13 @@ const FEED_DISTANCE_SLACK = 1.5;
 /** Folga (m) na distância até a mesa do comerciante, pela latência. */
 const TRADE_DISTANCE_SLACK = 1.5;
 
-export type TradeResult = { money: number; fishCaught: number };
+export type TradeResult = { money: number; inventory: Inventory };
 
 /** O que o cliente reenvia no `join` ao reconectar (já validado). */
 export interface SavedProgress {
-  fishCaught: number;
   money: number;
   outfit: Outfit;
+  inventory: Inventory;
 }
 
 export type JoinResult = { ok: true; player: PlayerSnapshot } | { ok: false; reason: JoinRejectReason };
@@ -91,12 +86,12 @@ export class Room {
       id,
       name,
       color: rawColor,
-      ...this.findSpawn(),
+      ...findSpawn(this.spawnCenter, this.snapshots().map((p) => p.position)),
       velocity: { x: 0, y: 0, z: 0 },
       anim: "idle",
-      fishCaught: saved.fishCaught,
       money: saved.money,
       outfit: { ...saved.outfit },
+      inventory: { ...saved.inventory },
     };
     this.players.set(id, {
       snapshot,
@@ -189,20 +184,18 @@ export class Room {
   }
 
   /**
-   * O cliente diz que pescou um peixe. Só conta se o jogador estiver junto à fonte
-   * e respeitar o intervalo mínimo. Retorna a nova contagem ou null se recusado.
+   * O cliente diz que pescou um peixe. Só conta se o jogador estiver junto à fonte, respeitar o
+   * intervalo mínimo e tiver espaço no inventário. Retorna o novo inventário ou null se recusado.
    */
-  catchFish(id: string, fountain: Vec3): number | null {
+  catchFish(id: string, fountain: Vec3): Inventory | null {
     const record = this.players.get(id);
     if (!record) return null;
     const now = Date.now();
-    if (now - record.lastFishAt < FISH_CATCH_COOLDOWN_MS) return null;
+    if (now - record.lastFishAt < FISH_CATCH_COOLDOWN_MS || !canAdd(record.snapshot.inventory, "fish")) return null;
     const maxDist = FOUNTAIN_RADIUS + FISHING_REACH + FISHING_DISTANCE_SLACK;
     if (distanceXZ(record.snapshot.position, fountain) > maxDist) return null;
     record.lastFishAt = now;
-    const fishCaught = Math.min(record.snapshot.fishCaught + 1, MAX_FISH_CAUGHT);
-    record.snapshot = { ...record.snapshot, fishCaught };
-    return fishCaught;
+    return this.changeItem(record, "fish", 1);
   }
 
   /** Posição atual do jogador (usada pelos animais que o seguem), ou null se ele saiu. */
@@ -212,23 +205,21 @@ export class Room {
 
   /**
    * O jogador quer dar um peixe a um animal em `target`. Só vale se ele tiver peixe,
-   * estiver perto do animal e respeitar o intervalo. Retorna a nova contagem ou null se recusado.
+   * estiver perto do animal e respeitar o intervalo. Retorna o novo inventário ou null se recusado.
    */
-  giveFish(id: string, target: { x: number; z: number }): number | null {
+  giveFish(id: string, target: { x: number; z: number }): Inventory | null {
     const record = this.players.get(id);
-    if (!record || record.snapshot.fishCaught <= 0) return null;
+    if (!record || countOf(record.snapshot.inventory, "fish") <= 0) return null;
     const now = Date.now();
     if (now - record.lastFeedAt < FEED_COOLDOWN_MS) return null;
     if (distanceXZ(record.snapshot.position, target) > FEED_RANGE + FEED_DISTANCE_SLACK) return null;
     record.lastFeedAt = now;
-    const fishCaught = record.snapshot.fishCaught - 1;
-    record.snapshot = { ...record.snapshot, fishCaught };
-    return fishCaught;
+    return this.changeItem(record, "fish", -1);
   }
 
   /**
    * Compra ou venda de uma unidade com o comerciante. Só vale perto da mesa, respeitando o
-   * intervalo, com dinheiro (ou o item) suficiente e estoque (ou espaço nele).
+   * intervalo, com dinheiro (ou o item) suficiente, espaço no inventário e estoque (ou espaço nele).
    * Retorna o novo dinheiro e inventário do jogador, ou null se recusado.
    */
   trade(id: string, { item, action }: TradeMessage, merchant: Merchant): TradeResult | null {
@@ -238,12 +229,12 @@ export class Room {
     if (now - record.lastTradeAt < TRADE_COOLDOWN_MS) return null;
     if (distanceXZ(record.snapshot.position, merchant.table) > MERCHANT_TRADE_RANGE + TRADE_DISTANCE_SLACK) return null;
 
-    const { field, max } = INVENTORY[item];
-    const owned = record.snapshot[field];
+    const { inventory } = record.snapshot;
+    const owned = countOf(inventory, item);
     let { money } = record.snapshot;
     if (action === "buy") {
       const price = ITEMS[item].price.buy;
-      if (money < price || owned >= max || !merchant.hasStock(item)) return null;
+      if (money < price || !canAdd(inventory, item) || !merchant.hasStock(item)) return null;
       money -= price;
     } else {
       const price = ITEMS[item].price.sell;
@@ -253,8 +244,8 @@ export class Room {
     const delta = action === "buy" ? 1 : -1;
     merchant.changeStock(item, -delta);
     record.lastTradeAt = now;
-    record.snapshot = { ...record.snapshot, money, [field]: owned + delta };
-    return { money, fishCaught: record.snapshot.fishCaught };
+    record.snapshot = { ...record.snapshot, money };
+    return { money, inventory: this.changeItem(record, item, delta) };
   }
 
   /** Desconta `amount` do dinheiro do jogador, se ele tiver. Retorna o novo saldo ou null se recusado. */
@@ -286,17 +277,25 @@ export class Room {
     if (record) record.snapshot = { ...record.snapshot, outfit: { ...outfit } };
   }
 
-  /** Escolhe um ponto na praça, longe dos outros jogadores, virado para a fonte. */
-  private findSpawn(): { position: Vec3; rotationY: number } {
-    const { x: cx, z: cz } = this.spawnCenter;
-    let position: Vec3 = { x: cx, y: 0, z: cz + SPAWN_MIN_DISTANCE };
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const angle = Math.random() * Math.PI * 2;
-      const r = SPAWN_MIN_DISTANCE + Math.random() * (SPAWN_MAX_DISTANCE - SPAWN_MIN_DISTANCE);
-      position = { x: cx + Math.sin(angle) * r, y: 0, z: cz + Math.cos(angle) * r };
-      const free = [...this.players.values()].every((p) => distanceXZ(p.snapshot.position, position) > PLAYER_RADIUS * 4);
-      if (free) break;
-    }
-    return { position, rotationY: Math.atan2(cx - position.x, cz - position.z) };
+  /** Dinheiro do jogador, ou null se ele saiu. */
+  moneyOf(id: string): number | null {
+    return this.players.get(id)?.snapshot.money ?? null;
+  }
+
+  /** O que o jogador carrega, ou null se ele saiu. */
+  inventoryOf(id: string): Inventory | null {
+    return this.players.get(id)?.snapshot.inventory ?? null;
+  }
+
+  /** Troca o inventário do jogador (quem chama já conferiu espaço e cobrou). */
+  setInventory(id: string, inventory: Inventory): void {
+    const record = this.players.get(id);
+    if (record) record.snapshot = { ...record.snapshot, inventory: { ...inventory } };
+  }
+
+  private changeItem(record: PlayerRecord, item: Parameters<typeof withItem>[1], amount: number): Inventory {
+    const inventory = withItem(record.snapshot.inventory, item, amount);
+    record.snapshot = { ...record.snapshot, inventory };
+    return inventory;
   }
 }

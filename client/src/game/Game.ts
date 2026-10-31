@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { PHYSICS_HZ, REACTIONS, TICK_RATE } from "@jogo/shared/constants";
 import type {
   AnimalFedMessage,
-  FishCountMessage,
+  InventoryMessage,
   HitMessage,
   JoinMessage,
   JoinRejectReason,
@@ -17,11 +17,13 @@ import type {
   ShootingResultMessage,
   ShootingStateMessage,
   SnapshotMessage,
+  TreeChoppedMessage,
   WelcomeMessage,
 } from "@jogo/shared/protocol";
 import { LocalPlayer } from "../entities/LocalPlayer";
 import type { Network } from "../net/Network";
 import { Hud } from "../ui/Hud";
+import { createDebugApi } from "./DebugApi";
 import { Input } from "./Input";
 import { Interactions } from "./Interactions";
 import type { Music } from "./Music";
@@ -113,13 +115,27 @@ export class Game {
       merchantManager: this.scenery.merchant,
       shootingBooth: this.scenery.shootingBooth,
       clothingShop: this.scenery.clothingShop,
+      toolShop: this.scenery.toolShop,
+      trees: this.scenery.trees,
+      lumberMill: this.scenery.lumberMill,
       selfId: () => this.selfId,
     });
     this.interactions.reset(welcome);
     this.input.onPointerLockChange = (locked) => this.hud.setPointerLocked(locked);
 
     this.bindNetwork(true);
-    if (import.meta.env.DEV) this.exposeDebugApi();
+    if (import.meta.env.DEV) {
+      window.__jogo = createDebugApi({
+        selfId: () => this.selfId,
+        local: this.local,
+        camera: this.camera,
+        remotes: this.remotes,
+        animals: this.animalsManager,
+        scenery: this.scenery,
+        interactions: this.interactions,
+        network: this.network,
+      });
+    }
     this.frameId = requestAnimationFrame(this.loop);
   }
 
@@ -138,7 +154,9 @@ export class Game {
     listen("hit", this.onHit);
     listen("lobby", this.onLobby);
     listen("reaction", this.onReaction);
-    listen("fishCount", this.onFishCount);
+    listen("inventory", this.onInventory);
+    listen("treeChopped", this.onTreeChopped);
+    listen("woodSold", this.onWoodSold);
     listen("animalFed", this.onAnimalFed);
     listen("money", this.onMoney);
     listen("merchantStock", this.onMerchantStock);
@@ -146,6 +164,7 @@ export class Game {
     listen("shootingResult", this.onShootingResult);
     listen("outfit", this.onOutfit);
     listen("outfitSold", this.onOutfitSold);
+    listen("toolSold", this.onToolSold);
     listen("disconnect", this.onDisconnect);
   }
 
@@ -170,7 +189,9 @@ export class Game {
     this.remotes.applySnapshot(msg);
     this.animalsManager.applySnapshot(msg.animals);
   };
-  private readonly onFishCount = ({ count }: FishCountMessage): void => this.interactions.fishing.setCount(count);
+  private readonly onInventory = ({ inventory }: InventoryMessage): void => this.interactions.inventory.set(inventory);
+  private readonly onTreeChopped = ({ treeId }: TreeChoppedMessage): void => this.scenery.trees.chop(treeId);
+  private readonly onWoodSold = (): void => this.scenery.lumberMill.playPurchase();
   private readonly onAnimalFed = ({ animalId }: AnimalFedMessage): void => this.animalsManager.playHeart(animalId);
   private readonly onMoney = ({ amount }: MoneyMessage): void => this.interactions.merchant.setMoney(amount);
   private readonly onMerchantStock = ({ stock }: MerchantStockMessage): void => {
@@ -181,6 +202,7 @@ export class Game {
   private readonly onShootingResult = ({ won }: ShootingResultMessage): void => this.scenery.shootingBooth.playResult(won);
   private readonly onOutfit = ({ outfit }: OutfitMessage): void => this.interactions.clothing.setOutfit(outfit);
   private readonly onOutfitSold = (): void => this.scenery.clothingShop.playSale();
+  private readonly onToolSold = (): void => this.scenery.toolShop.playSale();
   private readonly onLobby = (msg: LobbyMessage): void => this.hud.setOnline(msg.playerCount);
   private readonly onDisconnect = (): void => this.hud.setConnected(false);
 
@@ -252,32 +274,6 @@ export class Game {
 
   private toggleMusic(): void {
     this.hud.setMusicMuted(this.music.toggleMuted());
-  }
-
-  private exposeDebugApi(): void {
-    window.__jogo = {
-      selfId: () => this.selfId,
-      local: () => {
-        const s = this.local.state();
-        return { ...s.position, rotationY: s.rotationY, anim: s.anim };
-      },
-      remotes: () => this.remotes.debugInfo(),
-      lookAt: (x, z) => {
-        const p = this.local.renderPosition;
-        this.camera.yaw = Math.atan2(x - p.x, z - p.z);
-      },
-      trees: () => this.scenery.trees.debugInfo(),
-      square: () => this.scenery.square.debugInfo(),
-      fishing: () => ({ ...this.interactions.fishing.debugInfo(), label: this.interactions.label }),
-      animals: () => this.animalsManager.debugInfo(),
-      merchant: () => this.interactions.merchant.debugInfo(),
-      shooting: () => this.interactions.shooting.debugInfo(),
-      clothing: () => this.interactions.clothing.debugInfo(),
-      aimAt: (x, y, z) => {
-        this.camera.aimAt(new THREE.Vector3(x, y, z));
-        this.camera.update(0, this.local.renderPosition);
-      },
-    };
   }
 
   dispose(): void {

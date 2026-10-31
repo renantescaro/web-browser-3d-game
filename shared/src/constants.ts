@@ -107,7 +107,7 @@ export const ANIMAL_FOLLOW_MAX_SPEED = 8.5;
 
 // --- Árvores ---
 /** Quantas árvores o servidor gera ao iniciar. */
-export const TREE_COUNT = 10;
+export const TREE_COUNT = 20;
 /** Faixa da escala aleatória de cada árvore (1 = tamanho base, ~5 m de altura). */
 export const TREE_MIN_SCALE = 0.8;
 export const TREE_MAX_SCALE = 1.6;
@@ -117,6 +117,26 @@ export const TREE_MIN_SPACING = 8;
 export const TREE_SPAWN_CLEAR_RADIUS = 20;
 /** Distância mínima das bordas do mapa (m). */
 export const TREE_EDGE_MARGIN = 10;
+
+// --- Cortar árvores (com machado) ---
+/** Distância máxima (m) do jogador até o centro do tronco para cortar. */
+export const CHOP_RANGE = 1.8;
+/** Abertura total (graus) do cone em que o jogador precisa estar olhando para o tronco. */
+export const CHOP_FACING_DEG = 90;
+/** Madeira que uma árvore derrubada dá. */
+export const WOOD_PER_TREE = 2;
+/** Golpes certos para derrubar a árvore e erros que encerram o minigame. */
+export const CHOP_HITS_TO_FELL = 3;
+export const CHOP_MAX_MISSES = 3;
+/** Velocidade do marcador (larguras da barra por segundo) e largura da área certa (fração da barra). */
+export const CHOP_SPEED = 1.1;
+export const CHOP_ZONE_WIDTH = 0.2;
+/** Pausa depois de cada golpe, mostrando o resultado (ms). */
+export const CHOP_PAUSE_MS = 500;
+/** Intervalo mínimo entre duas árvores derrubadas pelo mesmo jogador, conferido no servidor (ms). */
+export const CHOP_COOLDOWN_MS = 1500;
+/** Altura do toco que fica no lugar da árvore cortada (m, em escala 1). */
+export const STUMP_HEIGHT = 0.45;
 
 // --- Reações ---
 /** Emojis disponíveis, indexados pelo ReactionId (0–3). */
@@ -169,8 +189,6 @@ export const FISHING_REACH = 1.2;
 export const FISHING_FACING_DEG = 100;
 /** Intervalo mínimo entre dois peixes pescados, conferido no servidor (ms). */
 export const FISH_CATCH_COOLDOWN_MS = 800;
-/** Limite do contador (protege o `join` de valores absurdos). */
-export const MAX_FISH_CAUGHT = 99_999;
 /** Pausa entre uma rodada do minigame e a próxima, mostrando o resultado (ms). */
 export const FISHING_ROUND_PAUSE_MS = 1200;
 /** Velocidade do marcador (larguras da barra por segundo): base, ganho por peixe e máximo. */
@@ -272,3 +290,51 @@ export const CLOTHING_SHOP_RANGE = 2.2;
 export const CLOTHING_FACING_DEG = 100;
 /** Intervalo mínimo entre duas compras de roupa, conferido no servidor (ms). */
 export const OUTFIT_BUY_COOLDOWN_MS = 300;
+
+// --- Loja de ferramentas (Gabriel; ferramentas e preços ficam em `tools.ts`) ---
+export const TOOL_SELLER_NAME = "Gabriel";
+/** Aparência do Gabriel: camisa xadrez de lenhador, avental de couro, boné e bigode. */
+export const TOOL_SELLER_APPEARANCE: CharacterAppearance = {
+  shirtColor: "#b23a2e",
+  pantsColor: "#2f3e46",
+  skinColor: "#d8a47f",
+  hat: { style: "cap", color: "#3a5a40" },
+  apronColor: "#7f5539",
+  mustacheColor: "#4a2f1b",
+};
+export const TOOL_SIGN_TEXT = "Ferramentas";
+/** Distância (m) da borda da praça até onde o Gabriel fica, do lado de fora. */
+export const TOOL_SQUARE_GAP = 2.5;
+/** Distância (m) do Gabriel até o centro da bancada, à frente dele. */
+export const TOOL_COUNTER_OFFSET = 0.9;
+/** Distância máxima (m) do jogador até o centro da bancada para comprar. */
+export const TOOL_SHOP_RANGE = 2.2;
+/** Abertura total (graus) do cone em que o jogador precisa estar olhando para a bancada. */
+export const TOOL_FACING_DEG = 100;
+/** Intervalo mínimo entre duas compras de ferramenta, conferido no servidor (ms). */
+export const TOOL_BUY_COOLDOWN_MS = 300;
+
+// --- Madeireira (Brenno compra a madeira cortada das árvores) ---
+export const LUMBER_BUYER_NAME = "Brenno";
+/** Aparência do Brenno: camisa xadrez azul, suspensórios marrons (colete), gorro laranja e bigodão. */
+export const LUMBER_BUYER_APPEARANCE: CharacterAppearance = {
+  shirtColor: "#2f6690",
+  pantsColor: "#3d405b",
+  skinColor: "#c68642",
+  hat: { style: "cap", color: "#e76f51" },
+  vestColor: "#6b4f2c",
+  mustacheColor: "#2b1d12",
+};
+export const LUMBER_SIGN_TEXT = "Madeireira";
+/** Quanto o Brenno paga por madeira (reais). */
+export const WOOD_SELL_PRICE = 5;
+/** Distância (m) da borda da praça até onde o Brenno fica, do lado de fora. */
+export const LUMBER_SQUARE_GAP = 2.5;
+/** Distância (m) do Brenno até o centro do balcão, à frente dele. */
+export const LUMBER_COUNTER_OFFSET = 0.9;
+/** Distância máxima (m) do jogador até o centro do balcão para vender. */
+export const LUMBER_RANGE = 2.2;
+/** Abertura total (graus) do cone em que o jogador precisa estar olhando para o balcão. */
+export const LUMBER_FACING_DEG = 100;
+/** Intervalo mínimo entre duas vendas de madeira, conferido no servidor (ms). */
+export const WOOD_SELL_COOLDOWN_MS = 300;

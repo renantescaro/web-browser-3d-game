@@ -1,11 +1,16 @@
 // Validação e sanitização de tudo que chega do cliente. Nunca confie no cliente.
-import { MAX_FISH_CAUGHT, MAX_HEIGHT, MAX_MONEY, NAME_MAX_LENGTH, NAME_MIN_LENGTH, PLAYER_COLORS, PLAYER_RADIUS, WORLD_HALF } from "@jogo/shared/constants";
+import { MAX_HEIGHT, MAX_MONEY, NAME_MAX_LENGTH, NAME_MIN_LENGTH, PLAYER_COLORS, PLAYER_RADIUS, WORLD_HALF } from "@jogo/shared/constants";
 import { isItemId } from "@jogo/shared/items";
 import { isOutfitItemId, OUTFIT_SLOTS, outfitItem, type Outfit } from "@jogo/shared/outfits";
+import { isToolId } from "@jogo/shared/tools";
+import { canAdd, INVENTORY_ITEM_IDS, INVENTORY_SLOTS, inventoryItem, withItem, type Inventory } from "@jogo/shared/inventory";
 import {
   ANIM_STATES,
   type AnimState,
   type BuyOutfitMessage,
+  type BuyToolMessage,
+  type ChopTreeMessage,
+  type SellWoodMessage,
   type FeedAnimalMessage,
   type ShootingShotMessage,
   type StateMessage,
@@ -42,15 +47,32 @@ export function isValidColor(value: unknown): value is string {
 /** Valida o formato do `join`. Nome e cor são verificados na sala (para dar o motivo certo). */
 export function parseJoin(
   value: unknown,
-): { name: unknown; color: unknown; fishCaught: number; money: number; outfit: Outfit } | null {
+): { name: unknown; color: unknown; money: number; outfit: Outfit; inventory: Inventory } | null {
   if (!isRecord(value)) return null;
   return {
     name: value.name,
     color: value.color,
-    fishCaught: parseCount(value.fishCaught, MAX_FISH_CAUGHT),
     money: parseCount(value.money, MAX_MONEY),
     outfit: parseOutfit(value.outfit),
+    inventory: parseInventory(value.inventory),
   };
+}
+
+/**
+ * Inventário vindo do cliente ao reconectar: só itens do catálogo, em quantidades inteiras, e só o
+ * que couber (espaços e limite de ferramentas); o que sobrar é descartado.
+ */
+export function parseInventory(value: unknown): Inventory {
+  let inventory: Inventory = {};
+  if (!isRecord(value)) return inventory;
+  for (const id of INVENTORY_ITEM_IDS) {
+    let wanted = parseCount(value[id], INVENTORY_SLOTS * inventoryItem(id).stack);
+    while (wanted > 0 && canAdd(inventory, id)) {
+      inventory = withItem(inventory, id, 1);
+      wanted--;
+    }
+  }
+  return inventory;
 }
 
 /** Roupas vindas do cliente ao reconectar: só fica o item do catálogo que é da parte certa do corpo. */
@@ -108,6 +130,26 @@ export function parseTrade(value: unknown): TradeMessage | null {
 export function parseBuyOutfit(value: unknown): BuyOutfitMessage | null {
   if (!isRecord(value) || !isOutfitItemId(value.item)) return null;
   return { item: value.item };
+}
+
+/** Valida o `buyTool`. Distância, dinheiro, espaço e intervalo são conferidos na loja. */
+export function parseBuyTool(value: unknown): BuyToolMessage | null {
+  if (!isRecord(value) || !isToolId(value.item)) return null;
+  return { item: value.item };
+}
+
+/** Valida o `chopTree`. Machado, distância, árvore e espaço são conferidos na floresta. */
+export function parseChopTree(value: unknown): ChopTreeMessage | null {
+  if (!isRecord(value) || typeof value.treeId !== "string" || value.treeId.length > 64) return null;
+  return { treeId: value.treeId };
+}
+
+/** Valida o `sellWood`: quantidade inteira e positiva. Se ele tem a madeira é conferido na madeireira. */
+export function parseSellWood(value: unknown): SellWoodMessage | null {
+  if (!isRecord(value) || !isFiniteNumber(value.amount) || !Number.isInteger(value.amount)) return null;
+  const maxWood = INVENTORY_SLOTS * inventoryItem("wood").stack;
+  if (value.amount < 1 || value.amount > maxWood) return null;
+  return { amount: value.amount };
 }
 
 /** Valida o tiro do Tiro ao Alvo. A partida, a distância e o intervalo são conferidos na galeria. */

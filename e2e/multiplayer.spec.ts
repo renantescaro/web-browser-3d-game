@@ -28,19 +28,34 @@ import {
   SQUARE_MIN_BENCHES,
   SQUARE_RADIUS,
   SQUARE_SIGN_TEXT,
+  CHOP_COOLDOWN_MS,
+  LUMBER_BUYER_NAME,
+  LUMBER_SIGN_TEXT,
+  TOOL_BUY_COOLDOWN_MS,
+  TOOL_SELLER_NAME,
+  TOOL_SHOP_RANGE,
+  TOOL_SIGN_TEXT,
   TREE_COUNT,
   TREE_MAX_SCALE,
   TREE_MIN_SCALE,
+  WOOD_PER_TREE,
+  WOOD_SELL_COOLDOWN_MS,
+  WOOD_SELL_PRICE,
   WORLD_HALF,
 } from "@jogo/shared/constants";
 import { ITEMS } from "@jogo/shared/items";
 import { OUTFIT_ITEMS, type Outfit } from "@jogo/shared/outfits";
+import { INVENTORY_ITEMS, INVENTORY_SLOTS, type Inventory } from "@jogo/shared/inventory";
+
+const STACK = INVENTORY_ITEMS.fish.stack;
+import { MAX_TOOLS, TOOL_ITEMS } from "@jogo/shared/tools";
 import type {
   AnimalSnapshot,
   AnimalType,
   ClientToServerEvents,
   ClothingShopData,
   LobbyMessage,
+  LumberMillData,
   MerchantData,
   MerchantStock,
   PlayerSnapshot,
@@ -48,6 +63,8 @@ import type {
   ShootingBoothData,
   ShootingResultMessage,
   ShootingStateMessage,
+  ToolShopData,
+  TreeData,
   Vec3,
 } from "@jogo/shared/protocol";
 
@@ -179,6 +196,18 @@ async function hookOneFish(page: Page): Promise<void> {
   }
 }
 
+/** Quantas unidades de `item` a barra de inventário da HUD mostra (somando os espaços). */
+function hudCount(page: Page, item: string): Promise<number> {
+  return page.evaluate(
+    (id) =>
+      [...document.querySelectorAll<HTMLElement>(`[data-testid="inventory"] .hud-slot[data-item="${id}"]`)].reduce(
+        (sum, slot) => sum + Number(slot.dataset.count ?? 0),
+        0,
+      ),
+    item,
+  );
+}
+
 /** Bot com peixes (e dinheiro) no inventário, como numa reconexão, que anda mandando `state` direto. */
 class FishBot {
   position: Vec3 = { x: 0, y: 0, z: 0 };
@@ -190,6 +219,20 @@ class FishBot {
   merchant: MerchantData | null = null;
   shootingBooth: ShootingBoothData | null = null;
   clothingShop: ClothingShopData | null = null;
+  toolShop: ToolShopData | null = null;
+  /** Cada `inventory` recebido. `fishCounts` e `axeCounts` são os peixes e machados de cada um. */
+  inventories: Inventory[] = [];
+  axeCounts: number[] = [];
+  toolSales: string[] = [];
+  lumberMill: LumberMillData | null = null;
+  /** Quem vendeu madeira ao Brenno (`woodSold`). */
+  woodSales: string[] = [];
+  /** Inventário informado no `welcome`. */
+  initialInventory: Inventory = {};
+  trees: TreeData[] = [];
+  choppedTrees: string[] = [];
+  /** Centro da fonte da praça. */
+  fountain: Vec3 = { x: 0, y: 0, z: 0 };
   outfits: Outfit[] = [];
   outfitSales: string[] = [];
   players: PlayerSnapshot[] = [];
@@ -208,7 +251,14 @@ class FishBot {
     });
     socket.on("outfit", ({ outfit }) => this.outfits.push(outfit));
     socket.on("outfitSold", ({ playerId }) => this.outfitSales.push(playerId));
-    socket.on("fishCount", ({ count }) => this.fishCounts.push(count));
+    socket.on("inventory", ({ inventory }) => {
+      this.inventories.push(inventory);
+      this.fishCounts.push(inventory.fish ?? 0);
+      this.axeCounts.push(inventory.axe ?? 0);
+    });
+    socket.on("toolSold", ({ playerId }) => this.toolSales.push(playerId));
+    socket.on("woodSold", ({ playerId }) => this.woodSales.push(playerId));
+    socket.on("treeChopped", ({ treeId }) => this.choppedTrees.push(treeId));
     socket.on("animalFed", ({ animalId }) => this.fedAnimals.push(animalId));
     socket.on("money", ({ amount }) => this.moneys.push(amount));
     socket.on("merchantStock", ({ stock }) => this.stocks.push(stock));
@@ -216,23 +266,36 @@ class FishBot {
     socket.on("shootingResult", (msg) => this.shootingResults.push(msg));
   }
 
-  static async join(name: string, color: string, fishCaught: number, money = 0, outfit?: unknown): Promise<FishBot> {
+  static async join(
+    name: string,
+    color: string,
+    fishCaught: number,
+    money = 0,
+    outfit?: unknown,
+    /** Mais itens no inventário reenviado (pode ter lixo, para testar a validação). */
+    inventory?: Record<string, unknown>,
+  ): Promise<FishBot> {
     const { socket } = await connectBot();
     const bot = new FishBot(socket);
     const welcome = await new Promise<Parameters<ServerToClientEvents["welcome"]>[0]>((resolve, reject) => {
       socket.once("welcome", resolve);
       socket.once("joinRejected", ({ reason }) => reject(new Error(`bot recusado: ${reason}`)));
-      socket.emit("join", { name, color, fishCaught, money, outfit: outfit as Outfit });
+      socket.emit("join", { name, color, money, outfit: outfit as Outfit, inventory: { fish: fishCaught, ...inventory } as Inventory });
     });
     const self = welcome.players.find((p) => p.id === welcome.selfId);
     if (self) {
       bot.position = self.position;
       bot.initialMoney = self.money;
       bot.initialOutfit = self.outfit;
+      bot.initialInventory = self.inventory;
     }
     bot.merchant = welcome.merchant;
     bot.shootingBooth = welcome.shootingBooth;
     bot.clothingShop = welcome.clothingShop;
+    bot.toolShop = welcome.toolShop;
+    bot.lumberMill = welcome.lumberMill;
+    bot.trees = welcome.trees;
+    bot.fountain = welcome.square.fountain.position;
     for (const a of welcome.animals) bot.types.set(a.id, a.type);
     await expect.poll(() => bot.animals.length).toBe(welcome.animals.length);
     return bot;
@@ -380,7 +443,7 @@ test("pesca na fonte: botão de Ação vira Pescar, minigame fica mais difícil 
   const action = page.getByTestId("action-label");
   const panel = page.getByTestId("fishing-panel");
   await expect(action).toContainText("Bater");
-  await expect(page.getByTestId("fish-count")).toHaveText("🐟 0");
+  await expect.poll(() => hudCount(page, "fish")).toBe(0);
 
   await walkToFountain(page);
   await expect(action).toContainText("Pescar");
@@ -393,7 +456,7 @@ test("pesca na fonte: botão de Ação vira Pescar, minigame fica mais difícil 
   const firstSpeed = (await fishing()).speed;
 
   await hookOneFish(page);
-  await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
+  await expect.poll(() => hudCount(page, "fish")).toBe(1);
 
   // A próxima rodada é mais difícil.
   await expect.poll(async () => (await fishing()).phase, { timeout: 5_000 }).toBe("playing");
@@ -406,7 +469,7 @@ test("pesca na fonte: botão de Ação vira Pescar, minigame fica mais difícil 
   await page.waitForTimeout(1200);
   await page.keyboard.up("KeyS");
   await expect(action).toContainText("Bater");
-  await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
+  await expect.poll(() => hudCount(page, "fish")).toBe(1);
   await closeAll([page]);
 });
 
@@ -459,7 +522,7 @@ test("dar peixe pelo botão de Ação: só com peixe no inventário, mostra cora
   await walkToFountain(page);
   await page.keyboard.press("KeyF");
   await hookOneFish(page);
-  await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
+  await expect.poll(() => hudCount(page, "fish")).toBe(1);
   await page.keyboard.press("KeyQ");
   const me = await page.evaluate(() => window.__jogo!.local());
   const selfId = await page.evaluate(() => window.__jogo!.selfId());
@@ -503,7 +566,7 @@ test("dar peixe pelo botão de Ação: só com peixe no inventário, mostra cora
 
   // Dá o peixe: o inventário zera, o coração surge e o cachorro passa a segui-lo.
   await page.keyboard.press("KeyF");
-  await expect(page.getByTestId("fish-count")).toHaveText("🐟 0");
+  await expect.poll(() => hudCount(page, "fish")).toBe(0);
   await expect(page.locator(".reaction-bubble--active", { hasText: "❤️" })).toHaveCount(1);
   await expect
     .poll(() => page.evaluate((id) => window.__jogo!.animals().find((a) => a.id === id)?.followingId, dog.id))
@@ -610,7 +673,7 @@ test("comerciante pelo botão de Ação: Negociar abre o painel, vende e compra 
   await walkToFountain(page);
   await page.keyboard.press("KeyF");
   await hookOneFish(page);
-  await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
+  await expect.poll(() => hudCount(page, "fish")).toBe(1);
   await page.keyboard.press("KeyQ");
 
   await walkFromFountainToMerchant(page);
@@ -625,7 +688,7 @@ test("comerciante pelo botão de Ação: Negociar abre o painel, vende e compra 
   // Vende o peixe: o dinheiro sobe, o peixe sai e o comerciante comemora.
   await page.getByTestId("merchant-sell-fish").click();
   await expect(page.getByTestId("money")).toHaveText("💰 R$ 1");
-  await expect(page.getByTestId("fish-count")).toHaveText("🐟 0");
+  await expect.poll(() => hudCount(page, "fish")).toBe(0);
   await expect(page.getByTestId("merchant-stock-fish")).toHaveText(`Estoque: ${stock + 1}`);
   await expect(page.getByTestId("merchant-wallet")).toContainText("R$ 1");
   await expect(page.locator(".reaction-bubble--active", { hasText: "💰" })).toHaveCount(1);
@@ -634,7 +697,7 @@ test("comerciante pelo botão de Ação: Negociar abre o painel, vende e compra 
   // Compra de volta.
   await page.getByTestId("merchant-buy-fish").click();
   await expect(page.getByTestId("money")).toHaveText("💰 R$ 0");
-  await expect(page.getByTestId("fish-count")).toHaveText("🐟 1");
+  await expect.poll(() => hudCount(page, "fish")).toBe(1);
   await expect(page.getByTestId("merchant-stock-fish")).toHaveText(`Estoque: ${stock}`);
 
   // Q fecha o painel.
@@ -763,6 +826,402 @@ test("loja de roupas pelo botão de Ação: abre o painel da Deendi e vê as rou
     bot.socket.disconnect();
     await closeAll([page]);
   }
+});
+
+/** Da praça até a bancada do Gabriel. */
+async function walkToToolShop(page: Page): Promise<void> {
+  const shop = await page.evaluate(() => window.__jogo!.tools()!);
+  await walkAroundFountainTo(page, shop, customerSpot({ ...shop, table: shop.counter }));
+  await page.evaluate(([x, z]) => window.__jogo!.lookAt(x, z), [shop.counter.x, shop.counter.z] as const);
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(80);
+  await page.keyboard.up("KeyW");
+}
+
+test("loja de ferramentas: compra machado, inventário de até 2 ferramentas, tudo validado no servidor", async () => {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const gap = TOOL_BUY_COOLDOWN_MS + 50;
+  const price = TOOL_ITEMS.axe.price;
+  // Dá para comprar mais de MAX_TOOLS machados: o limite é o inventário, não o dinheiro.
+  const start = price * (MAX_TOOLS + 1);
+  const bot = await FishBot.join("Lenhador", PLAYER_COLORS[8], 0, start);
+  const watcher = await FishBot.join("Vizinho", PLAYER_COLORS[9], 0, 0);
+  try {
+    const shop = bot.toolShop!;
+    expect(shop.sellerName).toBe(TOOL_SELLER_NAME);
+    expect(shop.signText).toBe(TOOL_SIGN_TEXT);
+    expect(bot.initialInventory).toEqual({});
+    // Cada barraca no seu lugar: a do Gabriel não fica em cima das outras.
+    for (const other of [bot.merchant!.position, bot.clothingShop!.position, bot.shootingBooth!.position]) {
+      expect(Math.hypot(other.x - shop.position.x, other.z - shop.position.z)).toBeGreaterThan(4);
+    }
+
+    // Longe da bancada: recusado.
+    bot.socket.emit("buyTool", { item: "axe" });
+    await wait(gap);
+    expect(bot.moneys).toEqual([]);
+
+    await bot.walkTo(() => customerSpot({ ...shop.position, table: shop.counter }), 0.3);
+    expect(Math.hypot(bot.position.x - shop.counter.x, bot.position.z - shop.counter.z)).toBeLessThan(TOOL_SHOP_RANGE);
+
+    // Ferramenta desconhecida é ignorada.
+    bot.socket.emit("buyTool", { item: "motosserra" } as never);
+    await wait(gap);
+    expect(bot.moneys).toEqual([]);
+
+    // Compra até o limite de ferramentas.
+    let money = start;
+    for (let i = 1; i <= MAX_TOOLS; i++) {
+      bot.socket.emit("buyTool", { item: "axe" });
+      money -= price;
+      await expect.poll(() => bot.moneys.at(-1)).toBe(money);
+      expect(bot.inventories.at(-1)).toEqual({ axe: i });
+      await wait(gap);
+    }
+    expect(bot.toolSales).toEqual(Array(MAX_TOOLS).fill(bot.id));
+    // Todos veem o inventário no snapshot.
+    await expect.poll(() => watcher.players.find((p) => p.id === bot.id)?.inventory).toEqual({ axe: MAX_TOOLS });
+
+    // Limite de ferramentas: recusado mesmo com dinheiro.
+    expect(money).toBeGreaterThanOrEqual(price);
+    bot.socket.emit("buyTool", { item: "axe" });
+    await wait(gap);
+    expect(bot.moneys.at(-1)).toBe(money);
+    expect(bot.inventories).toHaveLength(MAX_TOOLS);
+
+    // Sem dinheiro: recusado.
+    await watcher.walkTo(() => customerSpot({ ...shop.position, table: shop.counter }), 0.3);
+    watcher.socket.emit("buyTool", { item: "axe" });
+    await wait(gap);
+    expect(watcher.moneys).toEqual([]);
+  } finally {
+    bot.socket.disconnect();
+    watcher.socket.disconnect();
+  }
+
+  // O inventário volta no `join` (reconexão), validado: só itens do catálogo, quantidades inteiras,
+  // no máximo MAX_TOOLS ferramentas e só o que couber nos espaços.
+  const back = await FishBot.join("Voltou", PLAYER_COLORS[8], 15, 0, undefined, { axe: 5, serrote: 1, wood: 2.5 });
+  expect(back.initialInventory).toEqual({ fish: 15, axe: MAX_TOOLS });
+  back.socket.disconnect();
+  const hoarder = await FishBot.join("Acumulador", PLAYER_COLORS[8], 0, 0, undefined, { wood: 999 });
+  expect(hoarder.initialInventory).toEqual({ wood: INVENTORY_SLOTS * INVENTORY_ITEMS.wood.stack });
+  hoarder.socket.disconnect();
+});
+
+test("loja de ferramentas pelo botão de Ação: abre o painel do Gabriel e o HUD mostra o inventário", async ({ browser }) => {
+  const page = await joinAs(browser, "Curioso", 1);
+  const action = page.getByTestId("action-label");
+  const panel = page.getByTestId("tools-panel");
+  const bot = await FishBot.join("Freguês", PLAYER_COLORS[3], 0, TOOL_ITEMS.axe.price);
+  try {
+    expect(await hudCount(page, "axe")).toBe(0);
+    await walkToToolShop(page);
+    await expect(action).toContainText("Comprar ferramentas");
+    await page.keyboard.press("KeyF");
+    await expect(panel).toBeVisible();
+    await expect(action).toContainText("Fechar");
+    await expect(panel).toContainText(TOOL_SELLER_NAME);
+    await expect(page.getByTestId("tools-wallet")).toContainText(`(0/${MAX_TOOLS})`);
+    // Sem dinheiro: o botão mostra o preço, mas fica desabilitado.
+    await expect(page.getByTestId("tools-buy-axe")).toHaveText(`Comprar R$ ${TOOL_ITEMS.axe.price}`);
+    await expect(page.getByTestId("tools-buy-axe")).toBeDisabled();
+
+    // Outro jogador compra um machado: o Gabriel comemora para todos.
+    const shop = bot.toolShop!;
+    await bot.walkTo(() => customerSpot({ ...shop.position, table: shop.counter }), 0.3);
+    bot.socket.emit("buyTool", { item: "axe" });
+    await expect.poll(() => bot.axeCounts.at(-1)).toBe(1);
+    await expect(page.locator(".reaction-bubble--active", { hasText: "🔨" })).toHaveCount(1);
+
+    // Q fecha o painel.
+    await page.keyboard.press("KeyQ");
+    await expect(panel).toBeHidden();
+    await expect(action).toContainText("Comprar ferramentas");
+
+    // Volta (reconexão) com dinheiro, mas com o inventário cheio: não dá para comprar o machado.
+    const full = { fish: INVENTORY_SLOTS * STACK };
+    await page.evaluate((inventory) => window.__jogo!.rejoin({ money: 100, inventory }), full);
+    await expect.poll(() => hudCount(page, "fish")).toBe(full.fish);
+    await expect(page.getByTestId("inventory")).toHaveClass(/hud-inventory--full/);
+    await expect(action).toContainText("Comprar ferramentas");
+    await page.keyboard.press("KeyF");
+    await expect(page.getByTestId("tools-buy-axe")).toBeDisabled();
+    await expect(page.getByTestId("tools-status-axe")).toHaveText("🎒 Inventário cheio");
+  } finally {
+    bot.socket.disconnect();
+    await closeAll([page]);
+  }
+});
+
+/** Árvore em pé mais perto de (x, z). */
+function nearestStanding(trees: { id: string; x: number; z: number; chopped: boolean }[], x: number, z: number) {
+  const standing = trees.filter((t) => !t.chopped).sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z));
+  const tree = standing[0];
+  if (!tree) throw new Error("nenhuma árvore em pé");
+  return tree;
+}
+
+/** Leva o jogador para perto da árvore (do lado do centro do mapa) e o vira para o tronco. */
+async function goToTree(page: Page, tree: { x: number; z: number }): Promise<void> {
+  const me = await page.evaluate(() => window.__jogo!.local());
+  const d = Math.hypot(tree.x, tree.z);
+  const spot = { x: tree.x - (tree.x / d) * 4, z: tree.z - (tree.z / d) * 4 };
+  await page.evaluate(([x, z]) => window.__jogo!.teleport(x, z), [spot.x, spot.z] as const);
+  // O servidor aceita a posição nova aos poucos (limite de velocidade): dá tempo para ele alcançar.
+  await page.waitForTimeout(Math.hypot(spot.x - me.x, spot.z - me.z) * 50 + 500);
+  await walkTo(page, tree.x, tree.z, 1.4);
+  await page.evaluate(([x, z]) => window.__jogo!.lookAt(x, z), [tree.x, tree.z] as const);
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(60);
+  await page.keyboard.up("KeyW");
+}
+
+test("cortar árvore: precisa de machado e espaço, vira toco para todos e a madeira vai para o inventário", async () => {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const lumberjack = await FishBot.join("Lenhador", PLAYER_COLORS[5], 0, 0, undefined, { axe: 1 });
+  const noAxe = await FishBot.join("Sem Machado", PLAYER_COLORS[6], 0, 0);
+  let choppedId = "";
+  try {
+    expect(lumberjack.trees).toHaveLength(TREE_COUNT);
+    // O servidor pode estar rodando desde outros testes: escolhe uma árvore ainda em pé.
+    const tree = lumberjack.trees.find((t) => !t.chopped)!;
+    choppedId = tree.id;
+
+    // Longe da árvore: recusado.
+    lumberjack.socket.emit("chopTree", { treeId: tree.id });
+    // Sem machado: recusado.
+    await noAxe.walkTo(() => tree.position, 1.2);
+    noAxe.socket.emit("chopTree", { treeId: tree.id });
+    // Árvore que não existe: ignorado.
+    lumberjack.socket.emit("chopTree", { treeId: "carvalho-fantasma" });
+    await wait(500);
+    expect(lumberjack.inventories).toEqual([]);
+    expect(noAxe.inventories).toEqual([]);
+
+    // Com machado, perto da árvore: a madeira vai para o inventário e todos veem o toco.
+    await lumberjack.walkTo(() => tree.position, 1.2);
+    lumberjack.socket.emit("chopTree", { treeId: tree.id });
+    await expect.poll(() => lumberjack.inventories.at(-1)).toEqual({ axe: 1, wood: WOOD_PER_TREE });
+    await expect.poll(() => noAxe.choppedTrees).toEqual([tree.id]);
+    expect(lumberjack.choppedTrees).toEqual([tree.id]);
+
+    // O toco não dá madeira de novo.
+    await wait(CHOP_COOLDOWN_MS + 100);
+    lumberjack.socket.emit("chopTree", { treeId: tree.id });
+    await wait(500);
+    expect(lumberjack.inventories).toHaveLength(1);
+  } finally {
+    lumberjack.socket.disconnect();
+    noAxe.socket.disconnect();
+  }
+
+  // Quem chega depois já recebe o toco no `welcome`.
+  const late = await FishBot.join("Atrasado", PLAYER_COLORS[5], 0, 0);
+  expect(late.trees.find((t) => t.id === choppedId)?.chopped).toBe(true);
+  late.socket.disconnect();
+});
+
+test("inventário cheio: não pesca, não corta e não compra peixe nem machado; vender abre espaço", async () => {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  // Pilhas de peixe completas em todos os espaços menos um, e o machado no último: inventário cheio.
+  const fish = (INVENTORY_SLOTS - 1) * STACK;
+  const bot = await FishBot.join("Abarrotado", PLAYER_COLORS[7], fish, 100, undefined, { axe: 1 });
+  try {
+    expect(bot.initialInventory).toEqual({ fish, axe: 1 });
+
+    // Árvore: sem espaço para a madeira.
+    const tree = bot.trees.find((t) => !t.chopped)!;
+    await bot.walkTo(() => tree.position, 1.2);
+    bot.socket.emit("chopTree", { treeId: tree.id });
+    // Gabriel: sem espaço para outro machado.
+    const shop = bot.toolShop!;
+    await bot.walkTo(() => customerSpot({ ...shop.position, table: shop.counter }), 0.3);
+    bot.socket.emit("buyTool", { item: "axe" });
+    // Fonte: sem espaço para mais peixe.
+    await bot.walkTo(() => bot.fountain, 2.5);
+    bot.socket.emit("fishCaught", {});
+    await wait(500);
+    expect(bot.inventories).toEqual([]);
+    expect(bot.moneys).toEqual([]);
+
+    // Comerciante: comprar peixe é recusado; vender um peixe abre espaço numa pilha e aí a compra passa.
+    const merchant = bot.merchant!;
+    await bot.walkTo(() => customerSpot({ ...merchant.position, table: merchant.table }), 0.3);
+    bot.socket.emit("trade", { item: "fish", action: "buy" });
+    await wait(500);
+    expect(bot.inventories).toEqual([]);
+    bot.socket.emit("trade", { item: "fish", action: "sell" });
+    await expect.poll(() => bot.fishCounts).toEqual([fish - 1]);
+    await wait(300);
+    bot.socket.emit("trade", { item: "fish", action: "buy" });
+    await expect.poll(() => bot.fishCounts).toEqual([fish - 1, fish]);
+  } finally {
+    bot.socket.disconnect();
+  }
+});
+
+test("cortar árvore pelo botão de Ação: com machado, golpes derrubam a árvore; inventário cheio avisa", async ({ browser }) => {
+  const page = await joinAs(browser, "Lenhadora", 2);
+  const action = page.getByTestId("action-label");
+  const panel = page.getByTestId("chopping-panel");
+  const chopping = () => page.evaluate(() => window.__jogo!.chopping());
+
+  // Sem machado, de frente para a árvore, a Ação continua sendo Bater.
+  const me = await page.evaluate(() => window.__jogo!.local());
+  const tree = nearestStanding(await page.evaluate(() => window.__jogo!.trees()), me.x, me.z);
+  await goToTree(page, tree);
+  await expect(action).toContainText("Bater");
+
+  // Volta (reconexão) com um machado: a Ação vira Cortar árvore.
+  await page.evaluate(() => window.__jogo!.rejoin({ inventory: { axe: 1 } }));
+  await expect.poll(() => hudCount(page, "axe")).toBe(1);
+  await expect(action).toContainText("Cortar árvore");
+  await page.keyboard.press("KeyF");
+  await expect(panel).toBeVisible();
+  await expect(action).toContainText("Golpear");
+  await expect.poll(async () => (await page.evaluate(() => window.__jogo!.local())).anim).toBe("chop");
+
+  // Golpeia na área certa até derrubar.
+  for (let i = 0; i < 6 && !(await page.evaluate((id) => window.__jogo!.trees().find((t) => t.id === id)?.chopped, tree.id)); i++) {
+    await page.waitForFunction(
+      () => {
+        const c = window.__jogo!.chopping();
+        const margin = (c.zoneEnd - c.zoneStart) * 0.25;
+        return c.phase === "playing" && c.marker > c.zoneStart + margin && c.marker < c.zoneEnd - margin;
+      },
+      undefined,
+      { timeout: 10_000, polling: "raf" },
+    );
+    await page.keyboard.press("KeyF");
+    await expect.poll(async () => (await chopping()).phase).not.toBe("playing");
+    if ((await chopping()).phase === "felled") break;
+  }
+  await expect
+    .poll(() => page.evaluate((id) => window.__jogo!.trees().find((t) => t.id === id)?.chopped, tree.id))
+    .toBe(true);
+  await expect.poll(() => hudCount(page, "wood")).toBe(WOOD_PER_TREE);
+  expect(await page.evaluate(() => window.__jogo!.inventory())).toEqual({ axe: 1, wood: WOOD_PER_TREE });
+  // O minigame fecha sozinho e o toco não dá para cortar.
+  await expect(panel).toBeHidden({ timeout: 5_000 });
+  await expect(action).not.toContainText("Cortar árvore");
+
+  // Com o inventário cheio (madeira inclusive), cortar outra árvore só mostra o aviso.
+  const full = { fish: (INVENTORY_SLOTS - 2) * STACK, wood: INVENTORY_ITEMS.wood.stack, axe: 1 };
+  await page.evaluate((inventory) => window.__jogo!.rejoin({ inventory }), full);
+  await expect.poll(() => page.evaluate(() => window.__jogo!.inventory())).toEqual(full);
+  await expect(page.getByTestId("inventory")).toHaveClass(/hud-inventory--full/);
+  const here = await page.evaluate(() => window.__jogo!.local());
+  const other = nearestStanding(await page.evaluate(() => window.__jogo!.trees()), here.x, here.z);
+  await goToTree(page, other);
+  await expect(action).toContainText("Cortar árvore");
+  await page.keyboard.press("KeyF");
+  await expect(page.getByTestId("hud-notice")).toHaveText("🎒 Inventário cheio!");
+  await expect(panel).toBeHidden();
+  await closeAll([page]);
+});
+
+test("madeireira: o Brenno compra madeira, tudo validado no servidor", async () => {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const gap = WOOD_SELL_COOLDOWN_MS + 50;
+  const bot = await FishBot.join("Lenhador", PLAYER_COLORS[8], 0, 0, undefined, { wood: 5, axe: 1 });
+  const watcher = await FishBot.join("Vizinho", PLAYER_COLORS[9], 0, 0);
+  try {
+    const mill = bot.lumberMill!;
+    expect(mill.buyerName).toBe(LUMBER_BUYER_NAME);
+    expect(mill.signText).toBe(LUMBER_SIGN_TEXT);
+    expect(mill.woodPrice).toBe(WOOD_SELL_PRICE);
+    // O Brenno tem bigode.
+    expect(mill.appearance.mustacheColor).toBeTruthy();
+    // Cada barraca no seu lugar: a madeireira não fica em cima das outras.
+    for (const other of [bot.merchant!.position, bot.clothingShop!.position, bot.shootingBooth!.position, bot.toolShop!.position]) {
+      expect(Math.hypot(other.x - mill.position.x, other.z - mill.position.z)).toBeGreaterThan(4);
+    }
+
+    // Longe do balcão: recusado.
+    bot.socket.emit("sellWood", { amount: 1 });
+    await wait(gap);
+    expect(bot.moneys).toEqual([]);
+
+    await bot.walkTo(() => customerSpot({ ...mill.position, table: mill.counter }), 0.3);
+
+    // Quantidades inválidas ou maiores que a madeira que tem: recusado.
+    for (const amount of [0, -1, 2.5, "3", 6]) {
+      bot.socket.emit("sellWood", { amount } as never);
+      await wait(gap);
+    }
+    expect(bot.moneys).toEqual([]);
+
+    // Vende uma: recebe o preço, a madeira sai do inventário e todos veem o Brenno comemorar.
+    bot.socket.emit("sellWood", { amount: 1 });
+    await expect.poll(() => bot.moneys).toEqual([WOOD_SELL_PRICE]);
+    expect(bot.inventories.at(-1)).toEqual({ wood: 4, axe: 1 });
+    await expect.poll(() => watcher.woodSales).toEqual([bot.id]);
+
+    // Vende o resto de uma vez.
+    await wait(gap);
+    bot.socket.emit("sellWood", { amount: 4 });
+    await expect.poll(() => bot.moneys.at(-1)).toBe(5 * WOOD_SELL_PRICE);
+    expect(bot.inventories.at(-1)).toEqual({ axe: 1 });
+
+    // Sem madeira: recusado.
+    await wait(gap);
+    bot.socket.emit("sellWood", { amount: 1 });
+    await wait(gap);
+    expect(bot.moneys).toHaveLength(2);
+  } finally {
+    bot.socket.disconnect();
+    watcher.socket.disconnect();
+  }
+});
+
+/** Da praça até o balcão do Brenno. */
+async function walkToLumberMill(page: Page): Promise<void> {
+  const mill = await page.evaluate(() => window.__jogo!.lumber()!);
+  await walkAroundFountainTo(page, mill, customerSpot({ ...mill, table: mill.counter }));
+  await page.evaluate(([x, z]) => window.__jogo!.lookAt(x, z), [mill.counter.x, mill.counter.z] as const);
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(80);
+  await page.keyboard.up("KeyW");
+}
+
+test("madeireira pelo botão de Ação: vende uma madeira e depois todas ao Brenno", async ({ browser }) => {
+  const page = await joinAs(browser, "Lenhadora", 4);
+  const action = page.getByTestId("action-label");
+  const panel = page.getByTestId("lumber-panel");
+  // Volta (reconexão) com madeira cortada.
+  await page.evaluate(() => window.__jogo!.rejoin({ inventory: { wood: 3 } }));
+  await expect.poll(() => hudCount(page, "wood")).toBe(3);
+
+  await walkToLumberMill(page);
+  await expect(action).toContainText("Vender madeira");
+  await page.keyboard.press("KeyF");
+  await expect(panel).toBeVisible();
+  await expect(action).toContainText("Fechar");
+  await expect(panel).toContainText(LUMBER_BUYER_NAME);
+  await expect(page.getByTestId("lumber-wallet")).toContainText("🪵 3");
+  await expect(page.getByTestId("lumber-sell-all")).toHaveText(`Vender tudo R$ ${3 * WOOD_SELL_PRICE}`);
+
+  // Vende uma: o dinheiro sobe, a madeira desce e o Brenno comemora.
+  await page.getByTestId("lumber-sell-one").click();
+  await expect(page.getByTestId("money")).toHaveText(`💰 R$ ${WOOD_SELL_PRICE}`);
+  await expect.poll(() => hudCount(page, "wood")).toBe(2);
+  await expect(page.locator(".reaction-bubble--active", { hasText: "🪵" })).toHaveCount(1);
+
+  // Vende o resto: sem madeira, os botões desabilitam e o painel explica como conseguir mais.
+  await page.waitForTimeout(WOOD_SELL_COOLDOWN_MS + 50);
+  await page.getByTestId("lumber-sell-all").click();
+  await expect(page.getByTestId("money")).toHaveText(`💰 R$ ${3 * WOOD_SELL_PRICE}`);
+  await expect.poll(() => hudCount(page, "wood")).toBe(0);
+  await expect(page.getByTestId("lumber-sell-one")).toBeDisabled();
+  await expect(page.getByTestId("lumber-sell-all")).toBeDisabled();
+  await expect(page.getByTestId("lumber-hint")).toContainText("machado");
+
+  // Q fecha o painel.
+  await page.keyboard.press("KeyQ");
+  await expect(panel).toBeHidden();
+  await expect(action).toContainText("Vender madeira");
+  await closeAll([page]);
 });
 
 /** Ponto de onde se joga o Tiro ao Alvo: à frente do balcão. */

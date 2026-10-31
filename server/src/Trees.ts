@@ -49,6 +49,7 @@ export function generateTrees(blocked: BlockedArea[] = []): TreeData[] {
       position: { x: spot.x, y: 0, z: spot.z },
       rotationY: rand(0, Math.PI * 2),
       scale: rand(TREE_MIN_SCALE, TREE_MAX_SCALE),
+      chopped: false,
     });
   }
   return trees;

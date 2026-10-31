@@ -3,9 +3,8 @@ import * as THREE from "three";
 import { PUNCH_ANIM_MS, RUN_SPEED, WALK_SPEED } from "@jogo/shared/constants";
 import type { Outfit } from "@jogo/shared/outfits";
 import type { AnimState, CharacterAppearance } from "@jogo/shared/protocol";
-import { AirRifle } from "./AirRifle";
 import { buildAccessories } from "./CharacterAccessories";
-import { FishingRod } from "./FishingRod";
+import { HeldItems } from "./HeldItems";
 import { NameTag } from "./NameTag";
 import { Wardrobe } from "./wearables/Wardrobe";
 
@@ -24,9 +23,6 @@ const ARM = { radius: 0.075, length: 0.48, x: 0.32 };
 /** Pescando: inclinação do braço direito (para a frente) e da vara em relação à vertical. */
 const FISH_ARM_X = -1.1;
 const ROD_FROM_UP = 1.05;
-/** Coice da espingarda: duração (ms) e quanto os braços sobem (rad). */
-const SHOT_KICK_MS = 160;
-const SHOT_KICK = 0.3;
 
 /**
  * Variação da animação conforme a ação. `spreadL`/`spreadR` abrem os braços para fora
@@ -43,6 +39,8 @@ interface Pose {
 
 /** Mirando: braço direito esticado com a espingarda e o esquerdo cruzando para apoiar o cano. */
 const AIM_POSE: Pose = { legL: 0.12, legR: -0.12, armL: -1.4, armR: -Math.PI / 2, spreadL: -0.75, spreadR: -0.35 };
+/** Cortando: os dois braços erguidos acima da cabeça, segurando o machado. */
+const CHOP_POSE: Pose = { legL: 0.2, legR: -0.2, armL: -2.6, armR: -2.7, spreadL: -0.3, spreadR: -0.25 };
 
 export class Character {
   /** Posicionado nos pés; rotation.y = direção do personagem. */
@@ -54,8 +52,8 @@ export class Character {
   private readonly rightArm = new THREE.Group();
   private readonly leftLeg = new THREE.Group();
   private readonly rightLeg = new THREE.Group();
-  private readonly rod = new FishingRod();
-  private readonly rifle = new AirRifle();
+  /** Vara, espingarda e machado na mão direita (cada um só aparece na sua atividade). */
+  private readonly held: HeldItems;
   private readonly materials: THREE.MeshStandardMaterial[] = [];
   private readonly geometries: THREE.BufferGeometry[] = [];
   private readonly nameTag: NameTag;
@@ -66,7 +64,6 @@ export class Character {
   private swing = 0;
   private punchElapsed = Infinity;
   private hitElapsed = Infinity;
-  private shotElapsed = Infinity;
 
   /** `appearance` pode ser só a cor da camisa (jogadores) ou a aparência completa (NPCs). */
   constructor(name: string, appearance: CharacterAppearance | string) {
@@ -109,16 +106,13 @@ export class Character {
     this.wardrobe = new Wardrobe({ head, leftFoot: this.foot(this.leftLeg), rightFoot: this.foot(this.rightLeg) });
     if (look.outfit) this.wardrobe.set(look.outfit);
 
-    // Vara de pescar na mão direita (só aparece pescando).
-    this.rod.root.position.y = -(ARM.length + ARM.radius);
-    this.rod.root.rotation.x = ROD_FROM_UP - FISH_ARM_X;
-    this.rightArm.add(this.rod.root);
-
-    // Espingarda de pressão na mão direita (só aparece mirando), apontando para a frente
-    // mesmo com o braço virado para dentro.
-    this.rifle.root.position.y = -(ARM.length + ARM.radius);
-    this.rifle.root.rotation.z = AIM_POSE.spreadR;
-    this.rightArm.add(this.rifle.root);
+    // A vara aponta para cima e a espingarda compensa o braço virado para dentro.
+    this.held = new HeldItems(this.rightArm, this.leftArm, {
+      handY: -(ARM.length + ARM.radius),
+      rodTilt: ROD_FROM_UP - FISH_ARM_X,
+      aimSpread: AIM_POSE.spreadR,
+      chopArms: { left: CHOP_POSE.armL, right: CHOP_POSE.armR },
+    });
 
     this.nameTag = new NameTag(this.root, name, color);
   }
@@ -168,7 +162,12 @@ export class Character {
 
   /** Disparo da espingarda: coice rápido dos braços. */
   playShot(): void {
-    this.shotElapsed = 0;
+    this.held.playShot();
+  }
+
+  /** Golpe de machado: os braços descem com força e voltam a subir. */
+  playChop(): void {
+    this.held.playChop();
   }
 
   /** Exibe uma reação acima do personagem (emoji flutuante visível para todos). */
@@ -183,6 +182,7 @@ export class Character {
     const airborne = anim === "jump";
     const fishing = anim === "fish";
     const aiming = anim === "aim";
+    const chopping = anim === "chop";
     const moving = !airborne && speed > 0.3;
 
     // Ciclo de passos: frequência proporcional à velocidade.
@@ -198,7 +198,9 @@ export class Character {
         ? { legL: 0, legR: 0, armL: -0.7, armR: FISH_ARM_X, spreadL: 0.08, spreadR: 0.08 }
         : aiming
           ? AIM_POSE
-          : { legL: s, legR: -s, armL: -s * 0.8, armR: s * 0.8, spreadL: 0.06, spreadR: 0.06 };
+          : chopping
+            ? CHOP_POSE
+            : { legL: s, legR: -s, armL: -s * 0.8, armR: s * 0.8, spreadL: 0.06, spreadR: 0.06 };
 
     this.leftLeg.rotation.x += (pose.legL - this.leftLeg.rotation.x) * k;
     this.rightLeg.rotation.x += (pose.legR - this.rightLeg.rotation.x) * k;
@@ -214,26 +216,7 @@ export class Character {
 
     this.updatePunch(dt);
     this.updateHit(dt);
-    this.updateRod(dt, fishing);
-    this.updateRifle(dt, aiming);
-  }
-
-  /** Mostra a espingarda mirando e aplica o coice do último tiro. */
-  private updateRifle(dt: number, aiming: boolean): void {
-    this.rifle.root.visible = aiming;
-    if (!aiming || this.shotElapsed >= SHOT_KICK_MS) return;
-    this.shotElapsed += dt * 1000;
-    const kick = Math.sin(Math.PI * Math.min(1, this.shotElapsed / SHOT_KICK_MS)) * SHOT_KICK;
-    this.rightArm.rotation.x -= kick;
-    this.leftArm.rotation.x -= kick;
-  }
-
-  /** Mostra a vara pescando e mantém a linha pendendo na vertical. */
-  private updateRod(dt: number, fishing: boolean): void {
-    this.rod.root.visible = fishing;
-    if (!fishing) return;
-    this.rod.setLineAngle(-(this.rod.root.rotation.x + this.rightArm.rotation.x + this.body.rotation.x));
-    this.rod.update(dt);
+    this.held.update(dt, anim, this.body.rotation.x);
   }
 
   private updatePunch(dt: number): void {
@@ -269,15 +252,14 @@ export class Character {
 
   private setFlash(intensity: number): void {
     for (const m of this.materials) m.emissiveIntensity = intensity;
-    for (const m of this.wardrobe.materials()) m.emissiveIntensity = intensity;
+    for (const m of [...this.wardrobe.materials(), ...this.held.materials]) m.emissiveIntensity = intensity;
   }
 
   dispose(): void {
     this.root.removeFromParent();
     this.nameTag.dispose();
     this.wardrobe.dispose();
-    this.rod.dispose();
-    this.rifle.dispose();
+    this.held.dispose();
     for (const g of this.geometries) g.dispose();
     for (const m of this.materials) m.dispose();
   }

@@ -1,4 +1,5 @@
 // Painel do comerciante: dinheiro e itens do jogador, estoque e botões de comprar/vender.
+import { inventoryItem } from "@jogo/shared/inventory";
 import { ITEM_IDS, ITEMS, type ItemId } from "@jogo/shared/items";
 import type { MerchantStock, TradeAction } from "@jogo/shared/protocol";
 import { formatMoney, shopButton } from "./shopUi";
@@ -9,6 +10,8 @@ export interface MerchantView {
   stock: MerchantStock;
   money: number;
   owned: (item: ItemId) => number;
+  /** Cabe mais uma unidade no inventário? */
+  room: (item: ItemId) => boolean;
 }
 
 interface ItemRow {
@@ -53,7 +56,7 @@ export class MerchantPanel {
   }
 
   private createRow(id: ItemId): HTMLElement {
-    const item = ITEMS[id];
+    const item = { ...ITEMS[id], ...inventoryItem(id) };
     const row = document.createElement("div");
     row.className = "shop-item";
     const label = document.createElement("span");
@@ -85,13 +88,14 @@ export class MerchantPanel {
 
   render(view: MerchantView): void {
     this.name.textContent = `· ${view.merchantName}`;
-    const owned = ITEM_IDS.map((id) => `${ITEMS[id].emoji} ${view.owned(id)}`).join(" · ");
-    this.wallet.textContent = `Você tem 💰 ${formatMoney(view.money)} · ${owned}`;
+    const owned = ITEM_IDS.map((id) => `${inventoryItem(id).emoji} ${view.owned(id)}`).join(" · ");
+    const full = ITEM_IDS.every((id) => !view.room(id));
+    this.wallet.textContent = `Você tem 💰 ${formatMoney(view.money)} · ${owned}${full ? " · 🎒 Inventário cheio" : ""}`;
     for (const [id, row] of this.rows) {
       const { price, stock } = ITEMS[id];
       const inStock = view.stock[id];
       row.stock.textContent = `Estoque: ${inStock}`;
-      row.buy.disabled = inStock <= 0 || view.money < price.buy;
+      row.buy.disabled = inStock <= 0 || view.money < price.buy || !view.room(id);
       row.sell.disabled = view.owned(id) <= 0 || inStock >= stock.max;
     }
   }

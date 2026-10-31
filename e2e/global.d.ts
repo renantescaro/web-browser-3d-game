@@ -1,4 +1,5 @@
 // API de depuração exposta pelo cliente em modo dev (ver client/src/game/Game.ts).
+import type { Inventory } from "@jogo/shared/inventory";
 import type { Outfit } from "@jogo/shared/outfits";
 
 declare global {
@@ -8,7 +9,7 @@ declare global {
       local: () => { x: number; y: number; z: number; rotationY: number; anim: string };
       remotes: () => { id: string; name: string; x: number; y: number; z: number; outfit: Outfit }[];
       lookAt: (x: number, z: number) => void;
-      trees: () => { type: string; x: number; z: number; scale: number }[];
+      trees: () => { id: string; type: string; x: number; z: number; scale: number; chopped: boolean }[];
       square: () => {
         x: number;
         z: number;
@@ -68,6 +69,38 @@ declare global {
         outfit: Outfit;
         open: boolean;
       } | null;
+      tools: () => {
+        sellerName: string;
+        signText: string;
+        x: number;
+        z: number;
+        rotationY: number;
+        counter: { x: number; z: number };
+        open: boolean;
+      } | null;
+      lumber: () => {
+        buyerName: string;
+        signText: string;
+        x: number;
+        z: number;
+        rotationY: number;
+        counter: { x: number; z: number };
+        woodPrice: number;
+        open: boolean;
+      } | null;
+      inventory: () => Inventory;
+      chopping: () => {
+        active: boolean;
+        treeId: string | null;
+        phase: "playing" | "hit" | "missed" | "felled" | "slipped" | null;
+        marker: number;
+        zoneStart: number;
+        zoneEnd: number;
+        hits: number;
+        misses: number;
+      };
+      rejoin: (progress: { money?: number; inventory?: Inventory }) => void;
+      teleport: (x: number, z: number) => void;
       aimAt: (x: number, y: number, z: number) => void;
     };
   }

@@ -9,12 +9,15 @@ import { FISH_EATING_ANIMALS, type ClientToServerEvents, type ReactionId, type S
 import { Room } from "./Room.js";
 import { generateAnimals } from "./Animals.js";
 import { ClothingShop } from "./ClothingShop.js";
+import { Forest } from "./Forest.js";
+import { LumberMill } from "./LumberMill.js";
 import { Merchant, MERCHANT_CLEAR_RADIUS } from "./Merchant.js";
 import { ShootingBooth } from "./ShootingBooth.js";
 import { ShootingGallery, type ShootingUpdate } from "./ShootingGallery.js";
 import { generateSquare } from "./Square.js";
+import { ToolShop } from "./ToolShop.js";
 import { generateTrees } from "./Trees.js";
-import { parseBuyOutfit, parseFeedAnimal, parseJoin, parseShootingShot, parseState, parseTrade, RateLimiter } from "./validation.js";
+import { parseBuyOutfit, parseBuyTool, parseChopTree, parseSellWood, parseFeedAnimal, parseJoin, parseShootingShot, parseState, parseTrade, RateLimiter } from "./validation.js";
 
 const port = Number(process.env.PORT) || SERVER_PORT;
 const clientDist = normalize(join(dirname(fileURLToPath(import.meta.url)), "../../client/dist"));
@@ -60,12 +63,22 @@ const merchant = new Merchant(square);
 const shootingBooth = new ShootingBooth(square);
 const shootingGallery = new ShootingGallery(shootingBooth, room);
 const clothingShop = new ClothingShop(square, room);
+// A última a escolher lugar: fica no lado mais livre, longe das outras barracas.
+const toolShop = new ToolShop(square, [merchant.position, shootingBooth.position, clothingShop.position], room);
+const lumberMill = new LumberMill(
+  square,
+  [merchant.position, shootingBooth.position, clothingShop.position, toolShop.position],
+  room,
+);
 const trees = generateTrees([
   { x: square.position.x, z: square.position.z, radius: SQUARE_RADIUS + SQUARE_TREE_CLEARANCE },
   { x: merchant.position.x, z: merchant.position.z, radius: MERCHANT_CLEAR_RADIUS },
   shootingBooth.clearArea(),
   clothingShop.clearArea(),
+  toolShop.clearArea(),
+  lumberMill.clearArea(),
 ]);
+const forest = new Forest(trees, room);
 console.log(
   `[servidor] praça gerada em (${square.position.x.toFixed(0)}, ${square.position.z.toFixed(0)}): ` +
     `${square.benches.length} bancos, ${square.fountain.fish.length} peixes`,
@@ -87,6 +100,9 @@ io.on("connection", (socket) => {
   const tradeLimiter = new RateLimiter(6, 6);
   const shootingLimiter = new RateLimiter(5, 8);
   const outfitLimiter = new RateLimiter(4, 4);
+  const toolLimiter = new RateLimiter(4, 4);
+  const chopLimiter = new RateLimiter(2, 3);
+  const woodLimiter = new RateLimiter(4, 4);
 
   /** Manda ao jogador o estado do Tiro ao Alvo (e o dinheiro, se mudou); no fim, avisa todos. */
   const sendShooting = ({ state, money }: ShootingUpdate): void => {
@@ -112,11 +128,13 @@ io.on("connection", (socket) => {
       selfId: socket.id,
       players: room.snapshots(),
       animals: animals.map((a) => a.toData()),
-      trees,
+      trees: forest.snapshot(),
       square,
       merchant: merchant.toData(),
       shootingBooth: shootingBooth.toData(),
       clothingShop: clothingShop.toData(),
+      toolShop: toolShop.toData(),
+      lumberMill: lumberMill.toData(),
     });
     socket.to("game").emit("playerJoined", { player: result.player });
     io.emit("lobby", lobbyMessage());
@@ -143,8 +161,8 @@ io.on("connection", (socket) => {
 
   socket.on("fishCaught", () => {
     if (!room.has(socket.id) || !fishLimiter.allow()) return;
-    const count = room.catchFish(socket.id, square.fountain.position);
-    if (count !== null) socket.emit("fishCount", { count });
+    const inventory = room.catchFish(socket.id, square.fountain.position);
+    if (inventory) socket.emit("inventory", { inventory });
   });
 
   socket.on("feedAnimal", (raw: unknown) => {
@@ -153,10 +171,10 @@ io.on("connection", (socket) => {
     const animal = msg && animals.find((a) => a.id === msg.animalId);
     // Cavalos não comem peixe; quem já segue o jogador não precisa de outro.
     if (!animal || !FISH_EATING_ANIMALS.includes(animal.type) || animal.followingId === socket.id) return;
-    const count = room.giveFish(socket.id, animal);
-    if (count === null) return;
+    const inventory = room.giveFish(socket.id, animal);
+    if (!inventory) return;
     animal.followingId = socket.id;
-    socket.emit("fishCount", { count });
+    socket.emit("inventory", { inventory });
     io.to("game").emit("animalFed", { animalId: animal.id, playerId: socket.id });
   });
 
@@ -165,7 +183,7 @@ io.on("connection", (socket) => {
     const msg = parseTrade(raw);
     const result = msg && room.trade(socket.id, msg, merchant);
     if (!result) return;
-    socket.emit("fishCount", { count: result.fishCaught });
+    socket.emit("inventory", { inventory: result.inventory });
     socket.emit("money", { amount: result.money });
     io.to("game").emit("merchantStock", { stock: merchant.stockSnapshot(), playerId: socket.id });
   });
@@ -198,9 +216,41 @@ io.on("connection", (socket) => {
     io.to("game").emit("outfitSold", { playerId: socket.id, item: msg.item });
   });
 
+  socket.on("buyTool", (raw: unknown) => {
+    if (!room.has(socket.id) || !toolLimiter.allow()) return;
+    const msg = parseBuyTool(raw);
+    const sale = msg && toolShop.sell(socket.id, msg.item);
+    if (!msg || !sale) return;
+    socket.emit("money", { amount: sale.money });
+    socket.emit("inventory", { inventory: sale.inventory });
+    io.to("game").emit("toolSold", { playerId: socket.id, item: msg.item });
+  });
+
+  socket.on("chopTree", (raw: unknown) => {
+    if (!room.has(socket.id) || !chopLimiter.allow()) return;
+    const msg = parseChopTree(raw);
+    const inventory = msg && forest.chop(socket.id, msg.treeId);
+    if (!msg || !inventory) return;
+    socket.emit("inventory", { inventory });
+    io.to("game").emit("treeChopped", { treeId: msg.treeId, playerId: socket.id });
+  });
+
+  socket.on("sellWood", (raw: unknown) => {
+    if (!room.has(socket.id) || !woodLimiter.allow()) return;
+    const msg = parseSellWood(raw);
+    const sale = msg && lumberMill.buy(socket.id, msg.amount);
+    if (!msg || !sale) return;
+    socket.emit("money", { amount: sale.money });
+    socket.emit("inventory", { inventory: sale.inventory });
+    io.to("game").emit("woodSold", { playerId: socket.id, amount: msg.amount });
+  });
+
   socket.on("disconnect", () => {
     shootingGallery.stop(socket.id);
     clothingShop.forget(socket.id);
+    toolShop.forget(socket.id);
+    forest.forget(socket.id);
+    lumberMill.forget(socket.id);
     const left = room.leave(socket.id);
     if (!left) return;
     io.to("game").emit("playerLeft", { id: socket.id });

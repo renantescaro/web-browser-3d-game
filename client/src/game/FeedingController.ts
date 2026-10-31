@@ -1,5 +1,5 @@
 // Dar peixe a um gato ou cachorro: com peixe no inventário e de frente para um deles,
-// a Ação manda o peixe. O servidor confere, desconta e responde com `fishCount` e `animalFed`.
+// a Ação manda o peixe. O servidor confere, desconta e responde com `inventory` e `animalFed`.
 import type { LocalPlayer } from "../entities/LocalPlayer";
 import type { Network } from "../net/Network";
 import { ACTION_LABELS, type ActionHandler, type ActionLabel } from "./ActionResolver";

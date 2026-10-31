@@ -1,6 +1,8 @@
 // Tipos de TODAS as mensagens de rede. Fonte única da verdade para cliente e servidor.
 import type { ItemId } from "./items";
+import type { Inventory } from "./inventory";
 import type { Outfit, OutfitItemId } from "./outfits";
+import type { ToolId } from "./tools";
 
 export interface Vec3 {
   x: number;
@@ -8,8 +10,11 @@ export interface Vec3 {
   z: number;
 }
 
-/** "fish" = parado pescando, com a vara na mão; "aim" = mirando com a espingarda de pressão. */
-export const ANIM_STATES = ["idle", "walk", "run", "jump", "punch", "fish", "aim"] as const;
+/**
+ * "fish" = parado pescando, com a vara na mão; "aim" = mirando com a espingarda de pressão;
+ * "chop" = cortando uma árvore, com o machado erguido.
+ */
+export const ANIM_STATES = ["idle", "walk", "run", "jump", "punch", "fish", "aim", "chop"] as const;
 export type AnimState = (typeof ANIM_STATES)[number];
 
 export interface PlayerSnapshot {
@@ -21,12 +26,12 @@ export interface PlayerSnapshot {
   rotationY: number;
   velocity: Vec3;
   anim: AnimState;
-  /** Quantos peixes o jogador já pescou (atributo do jogador, guardado no servidor). */
-  fishCaught: number;
   /** Dinheiro do jogador, em reais. */
   money: number;
   /** Roupas e acessórios que o jogador veste (comprados da Deendi). */
   outfit: Outfit;
+  /** Tudo o que o jogador carrega: peixes, madeira e ferramentas (ver `inventory.ts`). */
+  inventory: Inventory;
 }
 
 export type JoinRejectReason = "full" | "invalidName" | "colorTaken";
@@ -56,6 +61,8 @@ export interface TreeData {
   rotationY: number;
   /** Escala uniforme, entre `TREE_MIN_SCALE` e `TREE_MAX_SCALE`. */
   scale: number;
+  /** Já foi derrubada: no lugar dela fica um toco. */
+  chopped: boolean;
 }
 
 export interface BenchData {
@@ -166,6 +173,34 @@ export interface ClothingShopData {
   signText: string;
 }
 
+/** A loja de ferramentas do Gabriel: uma bancada com painel de ferramentas, ao lado da praça. */
+export interface ToolShopData {
+  sellerName: string;
+  appearance: CharacterAppearance;
+  /** Pés do vendedor, atrás da bancada. */
+  position: Vec3;
+  /** Olha para o lado dos clientes (a bancada fica à frente dele). */
+  rotationY: number;
+  /** Centro da bancada (y = 0). Para comprar, o jogador fica perto dela. */
+  counter: Vec3;
+  signText: string;
+}
+
+/** A madeireira do Brenno: um balcão com pilhas de toras e uma serra, ao lado da praça. */
+export interface LumberMillData {
+  buyerName: string;
+  appearance: CharacterAppearance;
+  /** Pés do Brenno, atrás do balcão. */
+  position: Vec3;
+  /** Olha para o lado dos clientes (o balcão fica à frente dele). */
+  rotationY: number;
+  /** Centro do balcão (y = 0). Para vender, o jogador fica perto dele. */
+  counter: Vec3;
+  signText: string;
+  /** Quanto ele paga por madeira (reais). */
+  woodPrice: number;
+}
+
 export type ReactionId = 0 | 1 | 2 | 3;
 
 export interface ReactionMessage {
@@ -177,8 +212,8 @@ export interface ReactionMessage {
 export interface JoinMessage {
   name: string;
   color: string;
-  /** Peixes já pescados; o cliente reenvia ao reconectar para não perder a contagem. */
-  fishCaught?: number;
+  /** Inventário; o cliente reenvia ao reconectar para não perder o que carrega. */
+  inventory?: Inventory;
   /** Dinheiro (reais); reenviado ao reconectar, como os peixes. */
   money?: number;
   /** Roupas vestidas; reenviadas ao reconectar, como o dinheiro. */
@@ -227,6 +262,21 @@ export interface BuyOutfitMessage {
   item: OutfitItemId;
 }
 
+/** Comprar uma ferramenta do Gabriel (vai para o inventário de ferramentas). */
+export interface BuyToolMessage {
+  item: ToolId;
+}
+
+/** O cliente acertou o minigame de cortar; o servidor confere machado, distância e espaço. */
+export interface ChopTreeMessage {
+  treeId: string;
+}
+
+/** Vender `amount` madeiras ao Brenno. */
+export interface SellWoodMessage {
+  amount: number;
+}
+
 // --- Servidor → cliente ---
 export interface LobbyMessage {
   takenColors: string[];
@@ -242,6 +292,8 @@ export interface WelcomeMessage {
   merchant: MerchantData;
   shootingBooth: ShootingBoothData;
   clothingShop: ClothingShopData;
+  toolShop: ToolShopData;
+  lumberMill: LumberMillData;
 }
 
 export interface JoinRejectedMessage {
@@ -271,9 +323,15 @@ export interface SnapshotMessage {
   t: number;
 }
 
-/** Contagem atualizada de peixes do próprio jogador. */
-export interface FishCountMessage {
-  count: number;
+/** Inventário atualizado do próprio jogador (pescou, cortou, comprou, vendeu…). */
+export interface InventoryMessage {
+  inventory: Inventory;
+}
+
+/** `playerId` derrubou a árvore: todos trocam a árvore por um toco. */
+export interface TreeChoppedMessage {
+  treeId: string;
+  playerId: string;
 }
 
 /** Dinheiro atualizado do próprio jogador (reais). */
@@ -320,6 +378,18 @@ export interface OutfitSoldMessage {
   item: OutfitItemId;
 }
 
+/** `playerId` comprou na loja de ferramentas: todos veem o Gabriel comemorar. */
+export interface ToolSoldMessage {
+  playerId: string;
+  item: ToolId;
+}
+
+/** `playerId` vendeu madeira na madeireira: todos veem o Brenno comemorar. */
+export interface WoodSoldMessage {
+  playerId: string;
+  amount: number;
+}
+
 export interface HitMessage {
   attackerId: string;
   targetId: string;
@@ -339,6 +409,9 @@ export interface ClientToServerEvents {
   shootingShot: (msg: ShootingShotMessage) => void;
   shootingStop: (msg: ShootingStopMessage) => void;
   buyOutfit: (msg: BuyOutfitMessage) => void;
+  buyTool: (msg: BuyToolMessage) => void;
+  chopTree: (msg: ChopTreeMessage) => void;
+  sellWood: (msg: SellWoodMessage) => void;
 }
 
 /** Eventos que o servidor envia (tipagem do Socket.IO). */
@@ -351,7 +424,9 @@ export interface ServerToClientEvents {
   snapshot: (msg: SnapshotMessage) => void;
   hit: (msg: HitMessage) => void;
   reaction: (msg: ReactionMessage) => void;
-  fishCount: (msg: FishCountMessage) => void;
+  inventory: (msg: InventoryMessage) => void;
+  treeChopped: (msg: TreeChoppedMessage) => void;
+  woodSold: (msg: WoodSoldMessage) => void;
   animalFed: (msg: AnimalFedMessage) => void;
   money: (msg: MoneyMessage) => void;
   merchantStock: (msg: MerchantStockMessage) => void;
@@ -359,4 +434,5 @@ export interface ServerToClientEvents {
   shootingResult: (msg: ShootingResultMessage) => void;
   outfit: (msg: OutfitMessage) => void;
   outfitSold: (msg: OutfitSoldMessage) => void;
+  toolSold: (msg: ToolSoldMessage) => void;
 }

@@ -179,8 +179,7 @@ body {
 }
 
 .hud-online,
-.hud-money,
-.hud-fish {
+.hud-money {
   padding: 6px 12px;
   border-radius: 999px;
   background: rgb(0 0 0 / 0.45);
@@ -761,4 +760,64 @@ body {
 
 .shooting-crosshair[hidden] {
   display: none;
+}
+
+/* Inventário: uma fileira de espaços abaixo do canto superior direito. */
+.hud-inventory {
+  position: absolute;
+  top: 52px;
+  right: 12px;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.35);
+}
+
+.hud-inventory--full {
+  background: rgb(193 18 31 / 0.55);
+}
+
+.hud-slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 0.12);
+  font-size: 17px;
+}
+
+.hud-slot b {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  color: #fff;
+  font-size: 11px;
+  text-shadow: 0 0 3px #000;
+}
+
+/* Minigame de cortar árvore: reaproveita o painel da pesca, com cores de madeira. */
+.chopping-panel .fishing-bar {
+  background: #8a5a33;
+}
+
+.chopping-panel .fishing-zone {
+  background: #f6d743;
+}
+
+.chopping-panel[data-phase="hit"] .fishing-zone,
+.chopping-panel[data-phase="felled"] .fishing-zone {
+  background: #57cc99;
+}
+
+.chopping-panel[data-phase="missed"] .fishing-zone,
+.chopping-panel[data-phase="slipped"] .fishing-zone {
+  background: #e63946;
+}
+
+.chopping-pips {
+  letter-spacing: 4px;
 }
