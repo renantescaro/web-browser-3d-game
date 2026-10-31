@@ -1,0 +1,115 @@
+// Tudo o que o botão de Ação faz além de bater: comerciante, Tiro ao Alvo, dar peixe e
+// pesca. Monta os controladores, liga-os à HUD e decide quem fica com a Ação.
+import type * as THREE from "three";
+import type { MerchantStock, PlayerSnapshot } from "@jogo/shared/protocol";
+import type { LocalPlayer } from "../entities/LocalPlayer";
+import type { Network } from "../net/Network";
+import type { Hud } from "../ui/Hud";
+import { ACTION_LABELS, ActionResolver } from "./ActionResolver";
+import type { AnimalsManager } from "./AnimalsManager";
+import { FeedingController } from "./FeedingController";
+import { FishingController } from "./FishingController";
+import type { Input, Intents } from "./Input";
+import { MerchantController } from "./MerchantController";
+import type { MerchantManager } from "./MerchantManager";
+import type { ShootingBoothManager } from "./ShootingBoothManager";
+import { ShootingController } from "./ShootingController";
+import type { SquareManager } from "./SquareManager";
+import type { ThirdPersonCamera } from "./ThirdPersonCamera";
+import type { TouchControls } from "./TouchControls";
+
+export interface InteractionDeps {
+  container: HTMLElement;
+  touchMode: boolean;
+  local: LocalPlayer;
+  camera: ThirdPersonCamera;
+  view: THREE.PerspectiveCamera;
+  network: Network;
+  hud: Hud;
+  input: Input;
+  touch: TouchControls | null;
+  square: SquareManager;
+  animals: AnimalsManager;
+  merchantManager: MerchantManager;
+  shootingBooth: ShootingBoothManager;
+  selfId: () => string;
+}
+
+export class Interactions {
+  /** Também guarda a contagem de peixes (o inventário de peixes). */
+  readonly fishing: FishingController;
+  /** Também guarda o dinheiro do jogador. */
+  readonly merchant: MerchantController;
+  readonly shooting: ShootingController;
+  private readonly actions: ActionResolver;
+
+  constructor(d: InteractionDeps) {
+    this.fishing = new FishingController(d.container, d.touchMode, d.local, d.square, d.network);
+    const fishCount = () => this.fishing.fishCount;
+    this.merchant = new MerchantController(d.container, d.touchMode, d.local, d.merchantManager, d.network, fishCount);
+    this.shooting = new ShootingController(
+      d.container,
+      d.touchMode,
+      d.local,
+      d.shootingBooth,
+      d.camera,
+      d.view,
+      d.network,
+      () => this.merchant.balance,
+    );
+    const feeding = new FeedingController(d.local, d.animals, d.network, fishCount, d.selfId);
+
+    // Prioridade da Ação: Negociar, Jogar, Dar peixe, Pescar e, se nada servir, Bater.
+    this.actions = new ActionResolver([this.merchant, this.shooting, feeding, this.fishing]);
+    this.actions.onLabel = (label) => {
+      d.hud.setAction(label);
+      d.touch?.setActionLabel(label);
+    };
+    d.hud.setAction(ACTION_LABELS.punch);
+
+    this.fishing.onCount = (count) => {
+      d.hud.setFishCount(count);
+      this.merchant.refresh();
+    };
+    this.merchant.onOpen = () => d.input.releasePointerLock();
+    this.merchant.onMoney = (amount) => d.hud.setMoney(amount);
+    this.shooting.onNotice = (text) => d.hud.notify(text);
+  }
+
+  /** Rótulo atual do botão de Ação. */
+  get label(): string {
+    return this.actions.label;
+  }
+
+  /** Parado numa atividade (pescando ou mirando): o jogador não anda nem pula. */
+  get busy(): boolean {
+    return this.fishing.active || this.shooting.active;
+  }
+
+  /** Estado vindo do servidor no `welcome` (também ao reconectar): fecha tudo e recarrega. */
+  reset(self: PlayerSnapshot | undefined, stock: MerchantStock): void {
+    this.fishing.stop();
+    this.merchant.close();
+    this.shooting.stop();
+    this.merchant.setStock(stock);
+    if (!self) return;
+    this.fishing.setCount(self.fishCaught);
+    this.merchant.setMoney(self.money);
+  }
+
+  /** Chamar todo frame. Trata a Ação e retorna false se ela não foi usada (aí é bater). */
+  update(dt: number, intents: Intents): boolean {
+    this.merchant.update(intents);
+    this.fishing.update(dt, intents);
+    this.shooting.update(dt, intents);
+    const used = intents.action && this.actions.handle();
+    this.actions.update();
+    return used;
+  }
+
+  dispose(): void {
+    this.fishing.dispose();
+    this.merchant.dispose();
+    this.shooting.dispose();
+  }
+}

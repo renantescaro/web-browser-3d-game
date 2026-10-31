@@ -98,3 +98,34 @@ export function generateSquare(): SquareData {
     fountain: { position: { x: cx, y: 0, z: cz }, fish: generateFish() },
   };
 }
+
+/** Vão (em ângulo, a partir do centro da praça) entre dois bancos vizinhos. */
+export interface BenchGap {
+  /** Ângulo do meio do vão (convenção de `forwardFromYaw`). */
+  center: number;
+  width: number;
+  /** A placa da praça fica dentro deste vão. */
+  hasSign: boolean;
+}
+
+/** Os vãos entre bancos vizinhos, do maior para o menor. */
+export function benchGaps(square: SquareData): BenchGap[] {
+  const { x: cx, z: cz } = square.position;
+  const angleOf = (p: { x: number; z: number }) => Math.atan2(p.x - cx, p.z - cz);
+  const sign = angleOf(square.sign.position);
+  // Ângulos dos bancos medidos a partir da placa, em [0, 2π), em ordem.
+  const angles = square.benches
+    .map((b) => {
+      const a = (angleOf(b.position) - sign) % (Math.PI * 2);
+      return a < 0 ? a + Math.PI * 2 : a;
+    })
+    .sort((a, b) => a - b);
+  return angles
+    .map((start, i) => {
+      // O último vão dá a volta e contém a placa (ângulo 0).
+      const last = i === angles.length - 1;
+      const end = last ? (angles[0] ?? 0) + Math.PI * 2 : (angles[i + 1] ?? start);
+      return { center: sign + (start + end) / 2, width: end - start, hasSign: last };
+    })
+    .sort((a, b) => b.width - a.width);
+}

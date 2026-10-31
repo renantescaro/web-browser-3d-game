@@ -11,6 +11,13 @@ import {
   MERCHANT_TRADE_RANGE,
   PLAYER_COLORS,
   SERVER_PORT,
+  SHOOTING_ENTRY_COST,
+  SHOOTING_OWNER_NAME,
+  SHOOTING_PLAY_RANGE,
+  SHOOTING_PRIZE,
+  SHOOTING_SHOT_COOLDOWN_MS,
+  SHOOTING_SIGN_TEXT,
+  SHOOTING_TARGETS_TO_WIN,
   SQUARE_MAX_BENCHES,
   SQUARE_MIN_BENCHES,
   SQUARE_RADIUS,
@@ -29,6 +36,9 @@ import type {
   MerchantData,
   MerchantStock,
   ServerToClientEvents,
+  ShootingBoothData,
+  ShootingResultMessage,
+  ShootingStateMessage,
   Vec3,
 } from "@jogo/shared/protocol";
 
@@ -148,6 +158,9 @@ class FishBot {
   moneys: number[] = [];
   stocks: MerchantStock[] = [];
   merchant: MerchantData | null = null;
+  shootingBooth: ShootingBoothData | null = null;
+  shootingStates: ShootingStateMessage[] = [];
+  shootingResults: ShootingResultMessage[] = [];
   /** Dinheiro informado no `welcome`. */
   initialMoney = 0;
   private readonly types = new Map<string, AnimalType>();
@@ -158,6 +171,8 @@ class FishBot {
     socket.on("animalFed", ({ animalId }) => this.fedAnimals.push(animalId));
     socket.on("money", ({ amount }) => this.moneys.push(amount));
     socket.on("merchantStock", ({ stock }) => this.stocks.push(stock));
+    socket.on("shooting", (msg) => this.shootingStates.push(msg));
+    socket.on("shootingResult", (msg) => this.shootingResults.push(msg));
   }
 
   static async join(name: string, color: string, fishCaught: number, money = 0): Promise<FishBot> {
@@ -174,6 +189,7 @@ class FishBot {
       bot.initialMoney = self.money;
     }
     bot.merchant = welcome.merchant;
+    bot.shootingBooth = welcome.shootingBooth;
     for (const a of welcome.animals) bot.types.set(a.id, a.type);
     await expect.poll(() => bot.animals.length).toBe(welcome.animals.length);
     return bot;
@@ -448,16 +464,18 @@ function customerSpot(m: { x: number; z: number; table: { x: number; z: number }
   return { x: m.table.x + (dx / d) * 1.2, z: m.table.z + (dz / d) * 1.2 };
 }
 
-/** Da fonte até a mesa do comerciante: sai para um anel em volta da fonte, contorna e segue reto pelo vão entre os bancos. */
-async function walkFromFountainToMerchant(page: Page): Promise<void> {
+/**
+ * De perto da praça até `spot`, fora dela: entra num anel em volta da fonte, contorna até o
+ * ângulo de `toward` e segue reto pelo vão entre os bancos (onde ficam o comerciante e a barraca).
+ */
+async function walkAroundFountainTo(page: Page, toward: { x: number; z: number }, spot: { x: number; z: number }): Promise<void> {
   const square = await page.evaluate(() => window.__jogo!.square()!);
-  const merchant = await page.evaluate(() => window.__jogo!.merchant()!);
   const { x: fx, z: fz } = square.fountain;
   const ring = 5;
   const at = (angle: number) => [fx + Math.sin(angle) * ring, fz + Math.cos(angle) * ring] as const;
   const me = await page.evaluate(() => window.__jogo!.local());
   let angle = Math.atan2(me.x - fx, me.z - fz);
-  const target = Math.atan2(merchant.x - fx, merchant.z - fz);
+  const target = Math.atan2(toward.x - fx, toward.z - fz);
   await walkTo(page, ...at(angle), 0.8);
   let diff = Math.atan2(Math.sin(target - angle), Math.cos(target - angle));
   while (Math.abs(diff) > 0.05) {
@@ -466,8 +484,13 @@ async function walkFromFountainToMerchant(page: Page): Promise<void> {
     diff -= step;
     await walkTo(page, ...at(angle), 0.8);
   }
-  const spot = customerSpot(merchant);
   await walkTo(page, spot.x, spot.z, 0.4);
+}
+
+/** Da fonte até a mesa do comerciante. */
+async function walkFromFountainToMerchant(page: Page): Promise<void> {
+  const merchant = await page.evaluate(() => window.__jogo!.merchant()!);
+  await walkAroundFountainTo(page, merchant, customerSpot(merchant));
 }
 
 test("comerciante compra e vende peixe, com estoque e validação no servidor", async () => {
@@ -560,6 +583,190 @@ test("comerciante pelo botão de Ação: Negociar abre o painel, vende e compra 
   await page.keyboard.press("KeyQ");
   await expect(panel).toBeHidden();
   await expect(action).toContainText("Negociar");
+  await closeAll([page]);
+});
+
+/** Ponto de onde se joga o Tiro ao Alvo: à frente do balcão. */
+function boothSpot(b: { x: number; z: number; rotationY: number }): { x: number; z: number } {
+  return { x: b.x + Math.sin(b.rotationY) * 1.3, z: b.z + Math.cos(b.rotationY) * 1.3 };
+}
+
+test("Tiro ao Alvo: entrada, 5 patos seguidos dão o prêmio, errar encerra, tudo validado no servidor", async () => {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const shotGap = SHOOTING_SHOT_COOLDOWN_MS + 50;
+  const bot = await FishBot.join("Atirador", PLAYER_COLORS[5], 0, 2);
+  const broke = await FishBot.join("Duro", PLAYER_COLORS[6], 0, 0);
+  try {
+    const booth = bot.shootingBooth!;
+    expect(booth.ownerName).toBe(SHOOTING_OWNER_NAME);
+    expect(booth.signText).toBe(SHOOTING_SIGN_TEXT);
+    // O Balotinho fica atrás do balcão (do lado oposto aos clientes).
+    const toOwner = { x: booth.ownerPosition.x - booth.position.x, z: booth.ownerPosition.z - booth.position.z };
+    expect(toOwner.x * Math.sin(booth.rotationY) + toOwner.z * Math.cos(booth.rotationY)).toBeLessThan(0);
+
+    // Longe do balcão: recusado.
+    bot.socket.emit("shootingStart", {});
+    await wait(500);
+    expect(bot.shootingStates).toEqual([]);
+    expect(bot.moneys).toEqual([]);
+
+    const spot = boothSpot({ ...booth.position, rotationY: booth.rotationY });
+    await Promise.all([bot.walkTo(() => spot, 0.3), broke.walkTo(() => spot, 0.3)]);
+    expect(Math.hypot(bot.position.x - booth.position.x, bot.position.z - booth.position.z)).toBeLessThan(SHOOTING_PLAY_RANGE);
+
+    // Sem dinheiro não joga.
+    broke.socket.emit("shootingStart", {});
+    // Paga a entrada e começa; pedir de novo no meio da partida não cobra outra vez.
+    bot.socket.emit("shootingStart", {});
+    await expect.poll(() => bot.shootingStates).toEqual([{ phase: "playing", hits: 0 }]);
+    bot.socket.emit("shootingStart", {});
+    expect(bot.moneys).toEqual([2 - SHOOTING_ENTRY_COST]);
+
+    // Tiro inválido é ignorado; tiro rápido demais não conta, mas o placar volta.
+    bot.socket.emit("shootingShot", { hit: "sim" } as never);
+    bot.socket.emit("shootingShot", { hit: true });
+    bot.socket.emit("shootingShot", { hit: true });
+    await expect.poll(() => bot.shootingStates.slice(1)).toEqual([
+      { phase: "playing", hits: 1 },
+      { phase: "playing", hits: 1 },
+    ]);
+
+    // Acerta o resto em sequência: o último paga o prêmio e todos veem o resultado.
+    for (let hits = 2; hits <= SHOOTING_TARGETS_TO_WIN; hits++) {
+      await wait(shotGap);
+      bot.socket.emit("shootingShot", { hit: true });
+      const phase = hits === SHOOTING_TARGETS_TO_WIN ? "won" : "playing";
+      await expect.poll(() => bot.shootingStates.at(-1)).toEqual({ phase, hits });
+    }
+    const afterWin = 2 - SHOOTING_ENTRY_COST + SHOOTING_PRIZE;
+    expect(bot.moneys).toEqual([2 - SHOOTING_ENTRY_COST, afterWin]);
+    await expect.poll(() => broke.shootingResults).toEqual([{ playerId: bot.id, won: true }]);
+
+    // Nova partida: errar o primeiro tiro encerra sem prêmio.
+    bot.socket.emit("shootingStart", {});
+    await expect.poll(() => bot.moneys.at(-1)).toBe(afterWin - SHOOTING_ENTRY_COST);
+    await wait(shotGap);
+    bot.socket.emit("shootingShot", { hit: false });
+    await expect.poll(() => bot.shootingStates.at(-1)).toEqual({ phase: "lost", hits: 0 });
+    await expect.poll(() => broke.shootingResults.at(-1)).toEqual({ playerId: bot.id, won: false });
+
+    // Sair no meio perde a entrada: depois disso, tiros são ignorados.
+    bot.socket.emit("shootingStart", {});
+    await expect.poll(() => bot.moneys.at(-1)).toBe(afterWin - 2 * SHOOTING_ENTRY_COST);
+    const states = bot.shootingStates.length;
+    bot.socket.emit("shootingStop", {});
+    await wait(shotGap);
+    bot.socket.emit("shootingShot", { hit: true });
+    await wait(500);
+    expect(bot.shootingStates).toHaveLength(states);
+    expect(broke.shootingStates).toEqual([]);
+    expect(broke.moneys).toEqual([]);
+  } finally {
+    bot.socket.disconnect();
+    broke.socket.disconnect();
+  }
+});
+
+/**
+ * Mira no pato em pé mais perto do meio dos trilhos e atira (F). O tiro é resolvido no
+ * próximo frame, antes de os patos andarem, contra a tela atual: acerta onde mirou.
+ */
+async function shootDuck(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const api = window.__jogo!;
+    const { booth, ducks } = api.shooting();
+    if (!booth) throw new Error("sem barraca");
+    // Distância lateral até o meio da barraca (eixo +X local do balcão).
+    const lateral = (d: { x: number; z: number }) =>
+      Math.abs((d.x - booth.x) * Math.cos(booth.rotationY) - (d.z - booth.z) * Math.sin(booth.rotationY));
+    const duck = ducks.filter((d) => d.hittable).sort((a, b) => lateral(a) - lateral(b))[0];
+    if (!duck) throw new Error("nenhum pato em pé");
+    api.aimAt(duck.x, duck.y, duck.z);
+    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyF" }));
+    window.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyF" }));
+  });
+}
+
+test("Tiro ao Alvo pelo botão de Ação: sem dinheiro avisa; pagando, mira, acerta 5 patos e ganha o prêmio", async ({
+  browser,
+}) => {
+  test.setTimeout(150_000);
+  const page = await joinAs(browser, "Atiradora", 4);
+  const action = page.getByTestId("action-label");
+  const panel = page.getByTestId("shooting-panel");
+  const shooting = () => page.evaluate(() => window.__jogo!.shooting());
+  const booth = (await shooting()).booth!;
+  expect(booth.ownerName).toBe(SHOOTING_OWNER_NAME);
+  expect(booth.signText).toBe(SHOOTING_SIGN_TEXT);
+  const spot = boothSpot(booth);
+  const faceCounter = async () => {
+    await page.evaluate(([x, z]) => window.__jogo!.lookAt(x, z), [booth.x, booth.z] as const);
+    await page.keyboard.down("KeyW");
+    await page.waitForTimeout(80);
+    await page.keyboard.up("KeyW");
+  };
+
+  // Sem dinheiro: a Ação mostra o preço, mas só avisa.
+  await walkToFountain(page);
+  await walkAroundFountainTo(page, booth, spot);
+  await faceCounter();
+  await expect(action).toContainText(`Jogar (R$ ${SHOOTING_ENTRY_COST})`);
+  await page.keyboard.press("KeyF");
+  await expect(page.getByTestId("hud-notice")).toHaveText(`Você precisa de R$ ${SHOOTING_ENTRY_COST} para jogar.`);
+  expect((await shooting()).status).toBe("idle");
+  await expect(panel).toBeHidden();
+
+  // Pesca um peixe e vende ao comerciante para ter a entrada.
+  const square = await page.evaluate(() => window.__jogo!.square()!);
+  await walkTo(page, square.fountain.x, square.fountain.z, 3.3);
+  await page.keyboard.press("KeyF");
+  await hookOneFish(page);
+  await page.keyboard.press("KeyQ");
+  await walkFromFountainToMerchant(page);
+  await page.keyboard.press("KeyF");
+  await page.getByTestId("merchant-sell-fish").click();
+  await expect(page.getByTestId("money")).toHaveText("💰 R$ 1");
+  await page.keyboard.press("KeyQ");
+
+  // Volta à barraca e joga: paga a entrada, pega a espingarda e a mira aparece.
+  const merchant = await page.evaluate(() => window.__jogo!.merchant()!);
+  const { x: fx, z: fz } = square.fountain;
+  const out = Math.atan2(merchant.x - fx, merchant.z - fz);
+  await walkTo(page, fx + Math.sin(out) * 5, fz + Math.cos(out) * 5, 0.8);
+  await walkAroundFountainTo(page, booth, spot);
+  await faceCounter();
+  await page.keyboard.press("KeyF");
+  await expect(panel).toBeVisible();
+  await expect(page.getByTestId("shooting-crosshair")).toBeVisible();
+  await expect(page.getByTestId("money")).toHaveText("💰 R$ 0");
+  await expect(action).toContainText("Atirar");
+  await expect.poll(async () => (await page.evaluate(() => window.__jogo!.local())).anim).toBe("aim");
+  // Espera a câmera chegar ao ombro (a mira depende dela).
+  await page.waitForTimeout(800);
+
+  for (let hits = 1; hits <= SHOOTING_TARGETS_TO_WIN; hits++) {
+    await shootDuck(page);
+    await expect.poll(async () => (await shooting()).hits).toBe(hits);
+    await page.waitForTimeout(SHOOTING_SHOT_COOLDOWN_MS + 50);
+  }
+  await expect(page.getByTestId("shooting-message")).toContainText(`ganhou R$ ${SHOOTING_PRIZE}`);
+  await expect(page.getByTestId("money")).toHaveText(`💰 R$ ${SHOOTING_PRIZE}`);
+  await expect(page.locator(".reaction-bubble--active", { hasText: "🏆" })).toHaveCount(1);
+  // Depois do resultado guarda a espingarda e a Ação volta a ser "Jogar".
+  await expect(panel).toBeHidden();
+  await expect(action).toContainText("Jogar");
+  expect((await page.evaluate(() => window.__jogo!.local())).anim).not.toBe("aim");
+
+  // Outra partida: errar (mirando na parede) encerra sem prêmio.
+  await page.keyboard.press("KeyF");
+  await expect(panel).toBeVisible();
+  await expect(page.getByTestId("money")).toHaveText(`💰 R$ ${SHOOTING_PRIZE - SHOOTING_ENTRY_COST}`);
+  await page.waitForTimeout(800);
+  await page.evaluate(([x, z]) => window.__jogo!.aimAt(x, 0.5, z), [booth.x, booth.z] as const);
+  await page.keyboard.press("KeyF");
+  await expect(page.getByTestId("shooting-message")).toHaveText("Errou! Fim de jogo.");
+  await expect.poll(async () => (await shooting()).status).toBe("idle");
+  await expect(page.getByTestId("money")).toHaveText(`💰 R$ ${SHOOTING_PRIZE - SHOOTING_ENTRY_COST}`);
   await closeAll([page]);
 });
 

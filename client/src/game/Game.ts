@@ -13,20 +13,22 @@ import type {
   PlayerJoinedMessage,
   PlayerLeftMessage,
   ReactionMessage,
+  ShootingResultMessage,
+  ShootingStateMessage,
   SnapshotMessage,
   WelcomeMessage,
 } from "@jogo/shared/protocol";
 import { LocalPlayer } from "../entities/LocalPlayer";
 import type { Network } from "../net/Network";
 import { Hud } from "../ui/Hud";
-import { ACTION_LABELS, FishingController } from "./FishingController";
 import { Input } from "./Input";
+import { Interactions } from "./Interactions";
 import type { Music } from "./Music";
 import { Physics } from "./Physics";
 import { AnimalsManager } from "./AnimalsManager";
-import { MerchantController } from "./MerchantController";
 import { MerchantManager } from "./MerchantManager";
 import { RemotePlayers } from "./RemotePlayers";
+import { ShootingBoothManager } from "./ShootingBoothManager";
 import { SquareManager } from "./SquareManager";
 import { ThirdPersonCamera } from "./ThirdPersonCamera";
 import { TouchControls, isTouchDevice } from "./TouchControls";
@@ -53,8 +55,8 @@ export class Game {
   private readonly treesManager: TreesManager;
   private readonly squareManager: SquareManager;
   private readonly merchantManager: MerchantManager;
-  private readonly merchant: MerchantController;
-  private readonly fishing: FishingController;
+  private readonly shootingBooth: ShootingBoothManager;
+  private readonly interactions: Interactions;
   private readonly touch: TouchControls | null;
   private readonly moveDir = new THREE.Vector3();
   private selfId: string;
@@ -95,6 +97,9 @@ export class Game {
     this.merchantManager = new MerchantManager(this.physics, this.world.scene);
     this.merchantManager.load(welcome.merchant);
 
+    this.shootingBooth = new ShootingBoothManager(this.physics, this.world.scene);
+    this.shootingBooth.load(welcome.shootingBooth);
+
     const touchMode = isTouchDevice();
     this.hud = new Hud(container, touchMode);
     this.hud.setOnline(welcome.players.length);
@@ -107,35 +112,23 @@ export class Game {
     this.touch = touchMode ? new TouchControls(container, canvas) : null;
     this.input = new Input(canvas, this.touch);
 
-    // O peixe é o único item por enquanto; o inventário dele fica no FishingController.
-    this.merchant = new MerchantController(container, touchMode, this.local, this.merchantManager, network, () =>
-      this.fishing.fishCount,
-    );
-    this.merchant.onOpen = () => this.input.releasePointerLock();
-    this.merchant.onMoney = (amount) => this.hud.setMoney(amount);
-
-    this.fishing = new FishingController(
+    this.interactions = new Interactions({
       container,
       touchMode,
-      this.local,
-      this.squareManager,
+      local: this.local,
+      camera: this.camera,
+      view: this.world.camera,
       network,
-      this.animalsManager,
-      this.merchant,
-      () => this.selfId,
-    );
-    this.fishing.onActionLabel = (label) => {
-      this.hud.setAction(label);
-      this.touch?.setActionLabel(label);
-    };
-    this.fishing.onCount = (count) => {
-      this.hud.setFishCount(count);
-      this.merchant.refresh();
-    };
-    this.fishing.setCount(self?.fishCaught ?? 0);
-    this.merchant.setStock(welcome.merchant.stock);
-    this.merchant.setMoney(self?.money ?? 0);
-    this.hud.setAction(ACTION_LABELS.punch);
+      hud: this.hud,
+      input: this.input,
+      touch: this.touch,
+      square: this.squareManager,
+      animals: this.animalsManager,
+      merchantManager: this.merchantManager,
+      shootingBooth: this.shootingBooth,
+      selfId: () => this.selfId,
+    });
+    this.interactions.reset(self, welcome.merchant.stock);
     this.input.onPointerLockChange = (locked) => this.hud.setPointerLocked(locked);
 
     this.bindNetwork(true);
@@ -162,6 +155,8 @@ export class Game {
     listen("animalFed", this.onAnimalFed);
     listen("money", this.onMoney);
     listen("merchantStock", this.onMerchantStock);
+    listen("shooting", this.onShooting);
+    listen("shootingResult", this.onShootingResult);
     listen("disconnect", this.onDisconnect);
   }
 
@@ -173,14 +168,11 @@ export class Game {
     this.treesManager.load(msg.trees);
     this.squareManager.load(msg.square);
     this.merchantManager.load(msg.merchant);
-    this.fishing.stop();
-    this.merchant.close();
-    this.merchant.setStock(msg.merchant.stock);
-    const self = msg.players.find((p) => p.id === msg.selfId);
-    if (self) {
-      this.fishing.setCount(self.fishCaught);
-      this.merchant.setMoney(self.money);
-    }
+    this.shootingBooth.load(msg.shootingBooth);
+    this.interactions.reset(
+      msg.players.find((p) => p.id === msg.selfId),
+      msg.merchant.stock,
+    );
     this.hud.setConnected(true);
     this.network.sendState(this.local.state());
   };
@@ -195,13 +187,15 @@ export class Game {
     this.remotes.applySnapshot(msg);
     this.animalsManager.applySnapshot(msg.animals);
   };
-  private readonly onFishCount = ({ count }: FishCountMessage): void => this.fishing.setCount(count);
+  private readonly onFishCount = ({ count }: FishCountMessage): void => this.interactions.fishing.setCount(count);
   private readonly onAnimalFed = ({ animalId }: AnimalFedMessage): void => this.animalsManager.playHeart(animalId);
-  private readonly onMoney = ({ amount }: MoneyMessage): void => this.merchant.setMoney(amount);
+  private readonly onMoney = ({ amount }: MoneyMessage): void => this.interactions.merchant.setMoney(amount);
   private readonly onMerchantStock = ({ stock }: MerchantStockMessage): void => {
-    this.merchant.setStock(stock);
+    this.interactions.merchant.setStock(stock);
     this.merchantManager.playTrade();
   };
+  private readonly onShooting = (msg: ShootingStateMessage): void => this.interactions.shooting.onState(msg);
+  private readonly onShootingResult = ({ won }: ShootingResultMessage): void => this.shootingBooth.playResult(won);
   private readonly onLobby = (msg: LobbyMessage): void => this.hud.setOnline(msg.playerCount);
   private readonly onDisconnect = (): void => this.hud.setConnected(false);
 
@@ -223,15 +217,16 @@ export class Game {
     const dt = this.lastTime === null ? 0 : Math.min((time - this.lastTime) / 1000, 0.25);
     this.lastTime = time;
 
-    // 1) Intenções do input. A Ação pesca, dá peixe ou negocia conforme o contexto; senão, bate.
+    // 1) Intenções do input. A Ação negocia, joga, dá peixe ou pesca conforme o contexto; senão, bate.
+    // A Ação vem antes de girar a câmera: o tiro acerta o que estava na tela quando foi apertado.
     const intents = this.input.consume();
+    const actionUsed = this.interactions.update(dt, intents);
+    if (intents.action && !actionUsed && this.local.tryPunch(time)) this.network.punch();
     this.camera.rotate(intents.lookDX, intents.lookDY);
-    this.merchant.update(intents);
-    this.fishing.update(dt, intents);
-    if (intents.action && !this.fishing.handleAction() && this.local.tryPunch(time)) this.network.punch();
-    if (this.fishing.active) this.moveDir.set(0, 0, 0);
+    const busy = this.interactions.busy;
+    if (busy) this.moveDir.set(0, 0, 0);
     else this.camera.toWorldDirection(intents.moveX, intents.moveZ, this.moveDir);
-    this.local.setInput(this.moveDir, intents.run, intents.jump && !this.fishing.active);
+    this.local.setInput(this.moveDir, intents.run, intents.jump && !busy);
     if (intents.toggleMusic) this.toggleMusic();
     if (intents.reaction !== null) {
       const emoji = REACTIONS[intents.reaction];
@@ -246,6 +241,7 @@ export class Game {
     this.animalsManager.update(dt);
     this.squareManager.update(dt);
     this.merchantManager.update(dt);
+    this.shootingBooth.update(dt);
     this.accumulator += dt;
     let steps = 0;
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
@@ -289,9 +285,14 @@ export class Game {
       },
       trees: () => this.treesManager.debugInfo(),
       square: () => this.squareManager.debugInfo(),
-      fishing: () => this.fishing.debugInfo(),
+      fishing: () => ({ ...this.interactions.fishing.debugInfo(), label: this.interactions.label }),
       animals: () => this.animalsManager.debugInfo(),
-      merchant: () => this.merchant.debugInfo(),
+      merchant: () => this.interactions.merchant.debugInfo(),
+      shooting: () => this.interactions.shooting.debugInfo(),
+      aimAt: (x, y, z) => {
+        this.camera.aimAt(new THREE.Vector3(x, y, z));
+        this.camera.update(0, this.local.renderPosition);
+      },
     };
   }
 
@@ -299,14 +300,14 @@ export class Game {
     cancelAnimationFrame(this.frameId);
     this.music.stop();
     this.bindNetwork(false);
-    this.fishing.dispose();
-    this.merchant.dispose();
+    this.interactions.dispose();
     this.input.dispose();
     this.remotes.clear();
     this.animalsManager.dispose();
     this.treesManager.clear();
     this.squareManager.clear();
     this.merchantManager.clear();
+    this.shootingBooth.clear();
     this.local.dispose();
     this.physics.dispose();
     this.hud.dispose();

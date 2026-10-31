@@ -5,6 +5,7 @@ import {
   ANIM_STATES,
   type AnimState,
   type FeedAnimalMessage,
+  type ShootingShotMessage,
   type StateMessage,
   type TradeMessage,
   type Vec3,
@@ -87,6 +88,12 @@ export function parseTrade(value: unknown): TradeMessage | null {
   if (!isRecord(value) || !isItemId(value.item)) return null;
   if (value.action !== "buy" && value.action !== "sell") return null;
   return { item: value.item, action: value.action };
+}
+
+/** Valida o tiro do Tiro ao Alvo. A partida, a distância e o intervalo são conferidos na galeria. */
+export function parseShootingShot(value: unknown): ShootingShotMessage | null {
+  if (!isRecord(value) || typeof value.hit !== "boolean") return null;
+  return { hit: value.hit };
 }
 
 /** Mantém a posição dentro do mapa. */

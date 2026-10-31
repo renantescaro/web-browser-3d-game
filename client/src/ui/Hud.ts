@@ -1,8 +1,11 @@
 // HUD: contador "X/10 online", peixes pescados, dinheiro, ação atual, botão da música, ajuda de controles,
-// aviso de conexão e dica do mouse.
+// aviso de conexão, avisos curtos e dica do mouse.
 // No celular (touchMode) a ajuda descreve os controles de toque e não há dica do mouse.
 import { MAX_PLAYERS } from "@jogo/shared/constants";
 import { formatMoney } from "./MerchantPanel";
+
+/** Por quanto tempo um aviso curto fica na tela (ms). */
+const NOTICE_MS = 2500;
 
 export class Hud {
   private readonly root = document.createElement("div");
@@ -13,6 +16,8 @@ export class Hud {
   private readonly fishCount = document.createElement("div");
   private readonly money = document.createElement("div");
   private readonly action = document.createElement("div");
+  private readonly notice = document.createElement("div");
+  private noticeTimeout: ReturnType<typeof setTimeout> | null = null;
   /** Clique no botão da música. */
   onMusicToggle: (() => void) | null = null;
 
@@ -52,6 +57,10 @@ export class Hud {
     this.action.dataset.testid = "action-label";
     this.action.hidden = touchMode;
 
+    this.notice.className = "hud-notice";
+    this.notice.dataset.testid = "hud-notice";
+    this.notice.hidden = true;
+
     this.hint.className = "hud-hint";
     this.hint.textContent = "Clique na tela para controlar a câmera";
     this.hint.hidden = touchMode;
@@ -60,14 +69,14 @@ export class Hud {
     help.className = touchMode ? "hud-help hud-help-touch" : "hud-help";
     help.dataset.testid = "controls-help";
     help.innerHTML = touchMode
-      ? "<b>Analógico</b> mover (até a borda: correr)<br><b>Arraste a tela</b> câmera · <b>Ação</b> bater, pescar ou negociar · <b>😊😢😠💡</b> reações"
+      ? "<b>Analógico</b> mover (até a borda: correr)<br><b>Arraste a tela</b> câmera · <b>Ação</b> bater, pescar, negociar ou jogar · <b>😊😢😠💡</b> reações"
       : "<b>WASD</b> mover · <b>Shift</b> correr · <b>Espaço</b> pular<br>" +
-        "<b>Clique</b> ou <b>F</b> ação (bater/pescar/negociar) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
+        "<b>Clique</b> ou <b>F</b> ação (bater/pescar/negociar/jogar) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
 
     const topRight = document.createElement("div");
     topRight.className = "hud-top-right";
     topRight.append(this.musicButton, this.fishCount, this.money, this.online);
-    this.root.append(topRight, this.status, this.hint, this.action, help);
+    this.root.append(topRight, this.status, this.notice, this.hint, this.action, help);
     container.appendChild(this.root);
   }
 
@@ -88,6 +97,17 @@ export class Hud {
     this.action.innerHTML = `<b>F</b> ${label}`;
   }
 
+  /** Mostra um aviso curto no meio da tela (ex.: sem dinheiro para jogar). */
+  notify(text: string): void {
+    if (this.noticeTimeout !== null) clearTimeout(this.noticeTimeout);
+    this.notice.textContent = text;
+    this.notice.hidden = false;
+    this.noticeTimeout = setTimeout(() => {
+      this.notice.hidden = true;
+      this.noticeTimeout = null;
+    }, NOTICE_MS);
+  }
+
   setMusicMuted(muted: boolean): void {
     this.musicButton.textContent = muted ? "🔇" : "🎵";
     this.musicButton.title = muted ? "Ligar a música" : "Desligar a música";
@@ -104,6 +124,7 @@ export class Hud {
   }
 
   dispose(): void {
+    if (this.noticeTimeout !== null) clearTimeout(this.noticeTimeout);
     this.root.remove();
   }
 }

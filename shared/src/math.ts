@@ -8,6 +8,21 @@ export function forwardFromYaw(yaw: number): { x: number; z: number } {
   return { x: Math.sin(yaw), z: Math.cos(yaw) };
 }
 
+/**
+ * Converte um ponto (lx, lz) do espaço local de um objeto girado `yaw` para o mundo,
+ * igual ao `rotation.y` do Three.js (+Z local vira `forwardFromYaw(yaw)`).
+ */
+export function localToWorldXZ(
+  origin: { x: number; z: number },
+  yaw: number,
+  lx: number,
+  lz: number,
+): { x: number; z: number } {
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  return { x: origin.x + lx * c + lz * s, z: origin.z - lx * s + lz * c };
+}
+
 /** Normaliza um ângulo para o intervalo (-PI, PI]. */
 export function wrapAngle(angle: number): number {
   let a = angle % (Math.PI * 2);

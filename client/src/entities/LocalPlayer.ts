@@ -16,6 +16,9 @@ import type { AnimState, StateMessage, Vec3 } from "@jogo/shared/protocol";
 import { CAPSULE_CENTER_Y, type Physics } from "../game/Physics";
 import { Character } from "./Character";
 
+/** Animações de quem está parado fazendo algo (com a vara ou a espingarda na mão). */
+export type Stance = Extract<AnimState, "fish" | "aim">;
+
 /** Por quanto tempo um pulo apertado um pouco antes de tocar o chão continua valendo (s). */
 const JUMP_BUFFER = 0.12;
 /** Abaixo disso, considera que caiu do mundo e volta ao centro. */
@@ -41,8 +44,8 @@ export class LocalPlayer {
   private jumpBuffer = 0;
   private punchTimer = 0;
   private lastPunchAt = -Infinity;
-  /** Parado pescando: o loop zera o movimento e a animação vira "fish". */
-  fishing = false;
+  /** Parado numa atividade (pescando ou mirando): a animação vira essa. */
+  stance: Stance | null = null;
 
   constructor(
     private readonly physics: Physics,
@@ -145,7 +148,7 @@ export class LocalPlayer {
   get anim(): AnimState {
     if (this.punchTimer > 0) return "punch";
     if (!this.grounded) return "jump";
-    if (this.fishing) return "fish";
+    if (this.stance) return this.stance;
     if (this.moveDir.lengthSq() < 0.0001) return "idle";
     return this.running ? "run" : "walk";
   }

@@ -1,4 +1,4 @@
-// Estado da sala: entrada/saída, limite de jogadores, cores únicas, estados e socos.
+// Estado da sala: entrada/saída, limite de jogadores, cores únicas, estados, socos e dinheiro.
 import {
   FEED_COOLDOWN_MS,
   FEED_RANGE,
@@ -243,6 +243,24 @@ export class Room {
     record.lastTradeAt = now;
     record.snapshot = { ...record.snapshot, money, [field]: owned + delta };
     return { money, fishCaught: record.snapshot.fishCaught };
+  }
+
+  /** Desconta `amount` do dinheiro do jogador, se ele tiver. Retorna o novo saldo ou null se recusado. */
+  spendMoney(id: string, amount: number): number | null {
+    const record = this.players.get(id);
+    if (!record || record.snapshot.money < amount) return null;
+    const money = record.snapshot.money - amount;
+    record.snapshot = { ...record.snapshot, money };
+    return money;
+  }
+
+  /** Soma `amount` ao dinheiro do jogador (até `MAX_MONEY`). Retorna o novo saldo ou null se ele saiu. */
+  earnMoney(id: string, amount: number): number | null {
+    const record = this.players.get(id);
+    if (!record) return null;
+    const money = Math.min(record.snapshot.money + amount, MAX_MONEY);
+    record.snapshot = { ...record.snapshot, money };
+    return money;
   }
 
   /** Escolhe um ponto de nascimento longe dos outros jogadores. */

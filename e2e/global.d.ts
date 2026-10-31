@@ -45,6 +45,20 @@ declare global {
         money: number;
         open: boolean;
       } | null;
+      shooting: () => {
+        status: "idle" | "starting" | "playing" | "over";
+        hits: number;
+        booth: {
+          x: number;
+          z: number;
+          rotationY: number;
+          ownerName: string;
+          owner: { x: number; z: number };
+          signText: string;
+        } | null;
+        ducks: { id: string; x: number; y: number; z: number; hittable: boolean }[];
+      };
+      aimAt: (x: number, y: number, z: number) => void;
     };
   }
 }

@@ -7,8 +7,8 @@ export interface Vec3 {
   z: number;
 }
 
-/** "fish" = parado pescando, com a vara na mão. */
-export const ANIM_STATES = ["idle", "walk", "run", "jump", "punch", "fish"] as const;
+/** "fish" = parado pescando, com a vara na mão; "aim" = mirando com a espingarda de pressão. */
+export const ANIM_STATES = ["idle", "walk", "run", "jump", "punch", "fish", "aim"] as const;
 export type AnimState = (typeof ANIM_STATES)[number];
 
 export interface PlayerSnapshot {
@@ -95,7 +95,7 @@ export interface SquareData {
 }
 
 /** Estilos de chapéu de um personagem. */
-export const HAT_STYLES = ["cap", "wide"] as const;
+export const HAT_STYLES = ["cap", "wide", "boater"] as const;
 export type HatStyle = (typeof HAT_STYLES)[number];
 
 /** Aparência de um personagem humano. Jogadores só escolhem a cor da camisa; NPCs podem mudar tudo. */
@@ -111,6 +111,10 @@ export interface CharacterAppearance {
   apronColor?: string;
   /** Bigode. */
   mustacheColor?: string;
+  /** Gravata-borboleta. */
+  bowTieColor?: string;
+  /** Colete por cima da camisa. */
+  vestColor?: string;
 }
 
 /** Quanto de cada item o comerciante tem. */
@@ -129,6 +133,19 @@ export interface MerchantData {
   /** Texto da placa da mesa. */
   signText: string;
   stock: MerchantStock;
+}
+
+/** A barraca de Tiro ao Alvo: balcão, patos andando no fundo e o Balotinho num canto. */
+export interface ShootingBoothData {
+  ownerName: string;
+  appearance: CharacterAppearance;
+  /** Pés do dono, atrás do balcão. */
+  ownerPosition: Vec3;
+  /** Centro do balcão (y = 0). Para jogar, o jogador fica perto dele. */
+  position: Vec3;
+  /** A frente do balcão (lado dos clientes) olha para esta direção (yaw). */
+  rotationY: number;
+  signText: string;
 }
 
 export type ReactionId = 0 | 1 | 2 | 3;
@@ -174,6 +191,17 @@ export interface TradeMessage {
   action: TradeAction;
 }
 
+/** Pagar a entrada e começar o Tiro ao Alvo. */
+export type ShootingStartMessage = Record<string, never>;
+
+/** Um tiro no Tiro ao Alvo: o cliente diz se acertou um pato (a mira roda no cliente). */
+export interface ShootingShotMessage {
+  hit: boolean;
+}
+
+/** Sair do Tiro ao Alvo no meio (perde a entrada). */
+export type ShootingStopMessage = Record<string, never>;
+
 // --- Servidor → cliente ---
 export interface LobbyMessage {
   takenColors: string[];
@@ -187,6 +215,7 @@ export interface WelcomeMessage {
   trees: TreeData[];
   square: SquareData;
   merchant: MerchantData;
+  shootingBooth: ShootingBoothData;
 }
 
 export interface JoinRejectedMessage {
@@ -238,6 +267,22 @@ export interface AnimalFedMessage {
   playerId: string;
 }
 
+/** "playing" = jogo valendo; "won"/"lost" = acabou (ganhou o prêmio ou errou um tiro). */
+export type ShootingPhase = "playing" | "won" | "lost";
+
+/** Estado do Tiro ao Alvo do próprio jogador, decidido pelo servidor. */
+export interface ShootingStateMessage {
+  phase: ShootingPhase;
+  /** Patos acertados em sequência nesta partida. */
+  hits: number;
+}
+
+/** Uma partida acabou: todos veem a reação do dono da barraca. */
+export interface ShootingResultMessage {
+  playerId: string;
+  won: boolean;
+}
+
 export interface HitMessage {
   attackerId: string;
   targetId: string;
@@ -253,6 +298,9 @@ export interface ClientToServerEvents {
   fishCaught: (msg: FishCaughtMessage) => void;
   feedAnimal: (msg: FeedAnimalMessage) => void;
   trade: (msg: TradeMessage) => void;
+  shootingStart: (msg: ShootingStartMessage) => void;
+  shootingShot: (msg: ShootingShotMessage) => void;
+  shootingStop: (msg: ShootingStopMessage) => void;
 }
 
 /** Eventos que o servidor envia (tipagem do Socket.IO). */
@@ -269,4 +317,6 @@ export interface ServerToClientEvents {
   animalFed: (msg: AnimalFedMessage) => void;
   money: (msg: MoneyMessage) => void;
   merchantStock: (msg: MerchantStockMessage) => void;
+  shooting: (msg: ShootingStateMessage) => void;
+  shootingResult: (msg: ShootingResultMessage) => void;
 }

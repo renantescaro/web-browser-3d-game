@@ -620,3 +620,135 @@ body {
     grid-template-columns: 1fr auto;
   }
 }
+
+/* ---------- Avisos curtos da HUD ---------- */
+.hud-notice {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.65);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hud-notice[hidden] {
+  display: none;
+}
+
+/* ---------- Tiro ao Alvo ---------- */
+.shooting-panel {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  width: min(420px, calc(100% - 24px));
+  padding: 12px 16px 14px;
+  border-radius: 14px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  text-align: center;
+  pointer-events: auto;
+}
+
+.shooting-panel[hidden] {
+  display: none;
+}
+
+.shooting-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.shooting-owner {
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.shooting-progress {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 8px 0 6px;
+  font-size: 24px;
+}
+
+/* Patos ainda não acertados ficam apagados. */
+.shooting-target {
+  filter: grayscale(1);
+  opacity: 0.35;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.shooting-target--hit {
+  filter: none;
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+.shooting-message {
+  min-height: 1.4em;
+  font-size: 14px;
+}
+
+.shooting-panel[data-phase="won"] .shooting-message {
+  color: #f6d743;
+  font-weight: 700;
+}
+
+.shooting-panel[data-phase="lost"] .shooting-message {
+  color: #ff8a8a;
+  font-weight: 700;
+}
+
+.shooting-exit {
+  margin-top: 8px;
+  padding: 5px 14px;
+  border: 1px solid rgb(255 255 255 / 0.6);
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.shooting-exit:hover {
+  background: rgb(255 255 255 / 0.15);
+}
+
+/* Mira no centro da tela: um anel com um ponto. */
+.shooting-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 6;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5), inset 0 0 0 1px rgb(0 0 0 / 0.5);
+  pointer-events: none;
+}
+
+.shooting-crosshair::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #e63946;
+}
+
+.shooting-crosshair[hidden] {
+  display: none;
+}

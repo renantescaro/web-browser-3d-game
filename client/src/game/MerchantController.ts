@@ -7,6 +7,7 @@ import type { MerchantStock, TradeAction } from "@jogo/shared/protocol";
 import type { LocalPlayer } from "../entities/LocalPlayer";
 import type { Network } from "../net/Network";
 import { MerchantPanel } from "../ui/MerchantPanel";
+import { ACTION_LABELS, type ActionHandler, type ActionLabel } from "./ActionResolver";
 import type { Intents } from "./Input";
 import type { MerchantManager } from "./MerchantManager";
 
@@ -25,7 +26,7 @@ export interface MerchantDebugInfo {
   open: boolean;
 }
 
-export class MerchantController {
+export class MerchantController implements ActionHandler {
   /** Avisado quando o dinheiro muda. */
   onMoney: ((amount: number) => void) | null = null;
   /** Avisado ao abrir o painel (o `Game` solta o mouse para dar para clicar nos botões). */
@@ -58,11 +59,22 @@ export class MerchantController {
   }
 
   /** O jogador está de frente para a mesa, perto o bastante para negociar? */
-  canTrade(): boolean {
+  private canTrade(): boolean {
     const table = this.merchant.tablePosition();
     if (!table) return false;
     const p = this.local.renderPosition;
     return isFacingPoint(p, this.local.rotationY, table, MERCHANT_TRADE_RANGE, MERCHANT_FACING_DEG);
+  }
+
+  actionLabel(): ActionLabel | null {
+    if (this.active) return ACTION_LABELS.closeTrade;
+    return this.canTrade() ? ACTION_LABELS.trade : null;
+  }
+
+  /** Abre o painel ou, se já estiver aberto, fecha. */
+  act(): void {
+    if (this.active) this.close();
+    else this.open();
   }
 
   /** Chamar todo frame: fecha o painel se o jogador sair, andar ou for empurrado. */

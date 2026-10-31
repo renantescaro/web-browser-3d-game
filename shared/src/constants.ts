@@ -201,3 +201,46 @@ export const MERCHANT_FACING_DEG = 100;
 export const TRADE_COOLDOWN_MS = 150;
 /** Limite do dinheiro de um jogador (protege o `join` de valores absurdos). */
 export const MAX_MONEY = 999_999;
+
+// --- Tiro ao Alvo (barraca do Balotinho) ---
+export const SHOOTING_OWNER_NAME = "Balotinho";
+/** Aparência do dono da barraca: camisa listrada de parque, colete, gravata-borboleta e chapéu de palha. */
+export const SHOOTING_OWNER_APPEARANCE: CharacterAppearance = {
+  shirtColor: "#e9e4d8",
+  pantsColor: "#2b2d42",
+  skinColor: "#e3b48c",
+  hat: { style: "boater", color: "#e8c766" },
+  vestColor: "#c1121f",
+  bowTieColor: "#1d3557",
+  mustacheColor: "#5a3a22",
+};
+export const SHOOTING_SIGN_TEXT = "Tiro ao Alvo";
+/** Quanto custa jogar uma partida (reais). */
+export const SHOOTING_ENTRY_COST = 1;
+/** Prêmio por acertar `SHOOTING_TARGETS_TO_WIN` patos em sequência (reais). */
+export const SHOOTING_PRIZE = 10;
+export const SHOOTING_TARGETS_TO_WIN = 5;
+/** Intervalo mínimo entre dois tiros (ms). O servidor aceita uma pequena folga de rede. */
+export const SHOOTING_SHOT_COOLDOWN_MS = 400;
+/** Uma partida sem terminar expira depois disto (ms) e conta como derrota. */
+export const SHOOTING_MAX_SESSION_MS = 120_000;
+/** Distância (m) da borda da praça até o balcão, do lado de fora. */
+export const SHOOTING_SQUARE_GAP = 3.5;
+/** Meia-largura da barraca e profundidade do balcão até a parede do fundo (m). */
+export const SHOOTING_BOOTH_HALF_WIDTH = 2.1;
+export const SHOOTING_BOOTH_DEPTH = 3.4;
+/** Onde o Balotinho fica, no espaço da barraca (+Z = frente do balcão): num canto, fora da linha de tiro. */
+export const SHOOTING_OWNER_OFFSET = { x: 1.6, z: -0.8 } as const;
+/** Distância máxima (m) do jogador até o centro do balcão para jogar. */
+export const SHOOTING_PLAY_RANGE = 2.2;
+/** Abertura total (graus) do cone em que o jogador precisa estar olhando para o balcão. */
+export const SHOOTING_FACING_DEG = 100;
+/** Velocidade (m/s) dos patos em cada fileira; fileiras alternam o sentido. */
+export const SHOOTING_DUCK_SPEEDS = [1.1, 1.6] as const;
+/** Patos por fileira. */
+export const SHOOTING_DUCKS_PER_ROW = 3;
+/** Mirando: distância da câmera e deslocamento para o lado (por cima do ombro direito), em m. */
+export const AIM_CAMERA_DISTANCE = 2.2;
+export const AIM_CAMERA_SHOULDER = 0.6;
+/** Quão rápido a câmera entra/sai do modo de mira (1/s). */
+export const AIM_CAMERA_BLEND = 10;

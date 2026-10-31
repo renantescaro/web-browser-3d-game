@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { PUNCH_ANIM_MS, REACTION_DURATION_MS, RUN_SPEED, WALK_SPEED } from "@jogo/shared/constants";
 import type { AnimState, CharacterAppearance } from "@jogo/shared/protocol";
+import { AirRifle } from "./AirRifle";
 import { buildAccessories } from "./CharacterAccessories";
 import { FishingRod } from "./FishingRod";
 
@@ -23,15 +24,25 @@ const ARM = { radius: 0.075, length: 0.48, x: 0.32 };
 /** Pescando: inclinação do braço direito (para a frente) e da vara em relação à vertical. */
 const FISH_ARM_X = -1.1;
 const ROD_FROM_UP = 1.05;
+/** Coice da espingarda: duração (ms) e quanto os braços sobem (rad). */
+const SHOT_KICK_MS = 160;
+const SHOT_KICK = 0.3;
 
-/** Variação da animação conforme a ação. */
+/**
+ * Variação da animação conforme a ação. `spreadL`/`spreadR` abrem os braços para fora
+ * (negativo = para dentro, na frente do corpo).
+ */
 interface Pose {
   legL: number;
   legR: number;
   armL: number;
   armR: number;
-  spread: number;
+  spreadL: number;
+  spreadR: number;
 }
+
+/** Mirando: braço direito esticado com a espingarda e o esquerdo cruzando para apoiar o cano. */
+const AIM_POSE: Pose = { legL: 0.12, legR: -0.12, armL: -1.4, armR: -Math.PI / 2, spreadL: -0.75, spreadR: -0.35 };
 
 export class Character {
   /** Posicionado nos pés; rotation.y = direção do personagem. */
@@ -44,6 +55,7 @@ export class Character {
   private readonly leftLeg = new THREE.Group();
   private readonly rightLeg = new THREE.Group();
   private readonly rod = new FishingRod();
+  private readonly rifle = new AirRifle();
   private readonly materials: THREE.MeshStandardMaterial[] = [];
   private readonly geometries: THREE.BufferGeometry[] = [];
   private readonly label: CSS2DObject;
@@ -56,6 +68,7 @@ export class Character {
   private swing = 0;
   private punchElapsed = Infinity;
   private hitElapsed = Infinity;
+  private shotElapsed = Infinity;
 
   /** `appearance` pode ser só a cor da camisa (jogadores) ou a aparência completa (NPCs). */
   constructor(name: string, appearance: CharacterAppearance | string) {
@@ -98,6 +111,12 @@ export class Character {
     this.rod.root.position.y = -(ARM.length + ARM.radius);
     this.rod.root.rotation.x = ROD_FROM_UP - FISH_ARM_X;
     this.rightArm.add(this.rod.root);
+
+    // Espingarda de pressão na mão direita (só aparece mirando), apontando para a frente
+    // mesmo com o braço virado para dentro.
+    this.rifle.root.position.y = -(ARM.length + ARM.radius);
+    this.rifle.root.rotation.z = AIM_POSE.spreadR;
+    this.rightArm.add(this.rifle.root);
 
     // Nome flutuando acima da cabeça
     const el = document.createElement("div");
@@ -151,6 +170,11 @@ export class Character {
     this.hitElapsed = 0;
   }
 
+  /** Disparo da espingarda: coice rápido dos braços. */
+  playShot(): void {
+    this.shotElapsed = 0;
+  }
+
   /** Exibe uma reação acima do personagem (emoji flutuante visível para todos). */
   playReaction(emoji: string): void {
     if (this.reactionTimeout !== null) clearTimeout(this.reactionTimeout);
@@ -170,6 +194,7 @@ export class Character {
     const k = 1 - Math.exp(-14 * dt);
     const airborne = anim === "jump";
     const fishing = anim === "fish";
+    const aiming = anim === "aim";
     const moving = !airborne && speed > 0.3;
 
     // Ciclo de passos: frequência proporcional à velocidade.
@@ -180,17 +205,19 @@ export class Character {
     const s = Math.sin(this.walkPhase) * this.swing;
 
     const pose: Pose = airborne
-      ? { legL: -0.55, legR: -0.2, armL: -0.3, armR: -0.3, spread: 0.45 }
+      ? { legL: -0.55, legR: -0.2, armL: -0.3, armR: -0.3, spreadL: 0.45, spreadR: 0.45 }
       : fishing
-        ? { legL: 0, legR: 0, armL: -0.7, armR: FISH_ARM_X, spread: 0.08 }
-        : { legL: s, legR: -s, armL: -s * 0.8, armR: s * 0.8, spread: 0.06 };
+        ? { legL: 0, legR: 0, armL: -0.7, armR: FISH_ARM_X, spreadL: 0.08, spreadR: 0.08 }
+        : aiming
+          ? AIM_POSE
+          : { legL: s, legR: -s, armL: -s * 0.8, armR: s * 0.8, spreadL: 0.06, spreadR: 0.06 };
 
     this.leftLeg.rotation.x += (pose.legL - this.leftLeg.rotation.x) * k;
     this.rightLeg.rotation.x += (pose.legR - this.rightLeg.rotation.x) * k;
     this.leftArm.rotation.x += (pose.armL - this.leftArm.rotation.x) * k;
-    this.leftArm.rotation.z += (pose.spread - this.leftArm.rotation.z) * k;
+    this.leftArm.rotation.z += (pose.spreadL - this.leftArm.rotation.z) * k;
     this.rightArm.rotation.x += (pose.armR - this.rightArm.rotation.x) * k;
-    this.rightArm.rotation.z += (-pose.spread - this.rightArm.rotation.z) * k;
+    this.rightArm.rotation.z += (-pose.spreadR - this.rightArm.rotation.z) * k;
 
     // Respiração quando parado; leve "quique" ao correr.
     const breathe = moving || airborne ? 0 : Math.sin(this.time * 2.2) * 0.03;
@@ -200,6 +227,17 @@ export class Character {
     this.updatePunch(dt);
     this.updateHit(dt);
     this.updateRod(dt, fishing);
+    this.updateRifle(dt, aiming);
+  }
+
+  /** Mostra a espingarda mirando e aplica o coice do último tiro. */
+  private updateRifle(dt: number, aiming: boolean): void {
+    this.rifle.root.visible = aiming;
+    if (!aiming || this.shotElapsed >= SHOT_KICK_MS) return;
+    this.shotElapsed += dt * 1000;
+    const kick = Math.sin(Math.PI * Math.min(1, this.shotElapsed / SHOT_KICK_MS)) * SHOT_KICK;
+    this.rightArm.rotation.x -= kick;
+    this.leftArm.rotation.x -= kick;
   }
 
   /** Mostra a vara pescando e mantém a linha pendendo na vertical. */
@@ -249,6 +287,7 @@ export class Character {
     this.reactionLabel.removeFromParent();
     this.reactionLabel.element.remove();
     this.rod.dispose();
+    this.rifle.dispose();
     for (const g of this.geometries) g.dispose();
     for (const m of this.materials) m.dispose();
   }

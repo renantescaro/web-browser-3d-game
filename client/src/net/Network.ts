@@ -53,6 +53,21 @@ export class Network {
     if (this.socket.connected) this.socket.emit("trade", { item, action });
   }
 
+  /** Pede para jogar o Tiro ao Alvo; o servidor cobra a entrada e responde com `shooting`. */
+  shootingStart(): void {
+    if (this.socket.connected) this.socket.emit("shootingStart", {});
+  }
+
+  /** Um tiro no Tiro ao Alvo (acertou um pato ou não); o servidor responde com `shooting`. */
+  shootingShot(hit: boolean): void {
+    if (this.socket.connected) this.socket.emit("shootingShot", { hit });
+  }
+
+  /** Sai do Tiro ao Alvo no meio da partida. */
+  shootingStop(): void {
+    if (this.socket.connected) this.socket.emit("shootingStop", {});
+  }
+
   /** Avisa que acertou o minigame de pesca; o servidor confere e responde com `fishCount`. */
   catchFish(): void {
     if (this.socket.connected) this.socket.emit("fishCaught", {});
