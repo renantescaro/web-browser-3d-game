@@ -7,6 +7,9 @@ export function isTouchDevice(): boolean {
   return window.matchMedia("(pointer: coarse)").matches && navigator.maxTouchPoints > 0;
 }
 
+/** Botões do kart que valem enquanto estão apertados. */
+type KartKey = "left" | "right" | "accel" | "brake";
+
 export interface TouchIntents {
   moveX: number;
   moveZ: number;
@@ -23,6 +26,11 @@ export class TouchControls {
   private readonly stick = document.createElement("div");
   private readonly knob = document.createElement("div");
   private readonly actionButton: HTMLButtonElement;
+  private readonly jumpButton: HTMLButtonElement;
+  /** Pedais e volante do kart (só aparecem dirigindo). */
+  private readonly kartPad = document.createElement("div");
+  private kartMode = false;
+  private readonly held: Record<KartKey, boolean> = { left: false, right: false, accel: false, brake: false };
   private stickPointer: number | null = null;
   private lookPointer: number | null = null;
   private lastLookX = 0;
@@ -46,6 +54,7 @@ export class TouchControls {
     this.stick.appendChild(this.knob);
 
     const jump = this.createButton("Pular", "touch-jump", () => (this.jumpQueued = true));
+    this.jumpButton = jump;
     this.actionButton = this.createButton("Bater", "touch-action", () => (this.actionQueued = true));
     const reactionEmojis = ["😊", "😢", "😠", "💡"] as const;
     const reactionContainer = document.createElement("div");
@@ -58,7 +67,15 @@ export class TouchControls {
         }),
       );
     }
-    this.root.append(this.stick, jump, this.actionButton, reactionContainer);
+    this.kartPad.className = "touch-kart";
+    this.kartPad.hidden = true;
+    this.kartPad.append(
+      this.holdButton("◀", "touch-kart-left", "left"),
+      this.holdButton("▶", "touch-kart-right", "right"),
+      this.holdButton("Frear", "touch-kart-brake", "brake"),
+      this.holdButton("Acelerar", "touch-kart-accel", "accel"),
+    );
+    this.root.append(this.stick, jump, this.actionButton, reactionContainer, this.kartPad);
     container.appendChild(this.root);
 
     this.stick.addEventListener("pointerdown", this.onStickDown);
@@ -73,9 +90,11 @@ export class TouchControls {
 
   consume(): TouchIntents {
     const tilt = Math.hypot(this.moveX, this.moveZ);
+    const h = this.held;
+    // No kart: acelerar/frear viram o eixo frontal e as setas, o lateral (como W/S e A/D).
     const intents: TouchIntents = {
-      moveX: this.moveX,
-      moveZ: this.moveZ,
+      moveX: this.kartMode ? Number(h.right) - Number(h.left) : this.moveX,
+      moveZ: this.kartMode ? Number(h.accel) - Number(h.brake) : this.moveZ,
       run: tilt >= TOUCH_RUN_THRESHOLD,
       jump: this.jumpQueued,
       action: this.actionQueued,
@@ -89,6 +108,32 @@ export class TouchControls {
     this.lookDX = 0;
     this.lookDY = 0;
     return intents;
+  }
+
+  /** Dirigindo: troca o analógico e o Pular pelos pedais e setas do kart. */
+  setKartMode(on: boolean): void {
+    this.kartMode = on;
+    this.kartPad.hidden = !on;
+    this.stick.hidden = on;
+    this.jumpButton.hidden = on;
+    this.reset();
+  }
+
+  /** Botão que vale enquanto o dedo estiver em cima (pedal ou seta). */
+  private holdButton(label: string, className: string, key: KartKey): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `touch-btn ${className}`;
+    button.dataset.testid = className;
+    button.textContent = label;
+    const set = (down: boolean) => (e: PointerEvent) => {
+      e.preventDefault();
+      this.held[key] = down;
+      button.classList.toggle("touch-btn--held", down);
+    };
+    button.addEventListener("pointerdown", set(true));
+    for (const ev of ["pointerup", "pointercancel", "pointerleave"] as const) button.addEventListener(ev, set(false));
+    return button;
   }
 
   /** Texto do botão de Ação conforme o contexto (Bater, Pescar, Fisgar). */
@@ -175,6 +220,8 @@ export class TouchControls {
     this.moveX = 0;
     this.moveZ = 0;
     this.knob.style.transform = "";
+    for (const key of Object.keys(this.held) as (KartKey)[]) this.held[key] = false;
+    for (const b of this.kartPad.querySelectorAll(".touch-btn--held")) b.classList.remove("touch-btn--held");
   }
 
   dispose(): void {

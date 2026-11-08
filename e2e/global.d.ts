@@ -7,7 +7,7 @@ declare global {
     __jogo?: {
       selfId: () => string;
       local: () => { x: number; y: number; z: number; rotationY: number; anim: string };
-      remotes: () => { id: string; name: string; x: number; y: number; z: number; outfit: Outfit }[];
+      remotes: () => { id: string; name: string; x: number; y: number; z: number; anim: string; outfit: Outfit }[];
       lookAt: (x: number, z: number) => void;
       trees: () => { id: string; type: string; x: number; z: number; scale: number; chopped: boolean }[];
       square: () => {
@@ -88,6 +88,24 @@ declare global {
         woodPrice: number;
         open: boolean;
       } | null;
+      kart: () => {
+        phase: "idle" | "lobby" | "countdown" | "racing" | "results";
+        driving: boolean;
+        kmh: number;
+        racers: { id: string; name: string; slot: number; lap: number; place: number; finishMs: number | null }[];
+        track: {
+          center: { x: number; z: number };
+          width: number;
+          length: number;
+          start: { x: number; z: number; rotationY: number };
+          laps: number;
+          ownerName: string;
+          owner: { x: number; z: number };
+          counter: { x: number; z: number };
+          rotationY: number;
+          signText: string;
+        } | null;
+      };
       inventory: () => Inventory;
       chopping: () => {
         active: boolean;

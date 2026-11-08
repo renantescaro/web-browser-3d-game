@@ -74,7 +74,7 @@ export class Hud {
       help.dataset.testid = "controls-help";
       help.innerHTML =
         "<b>WASD</b> mover · <b>Shift</b> correr · <b>Espaço</b> pular<br>" +
-        "<b>Clique</b> ou <b>F</b> ação (bater/pescar/cortar/negociar/comprar/vender/jogar) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
+        "<b>Clique</b> ou <b>F</b> ação (bater/pescar/cortar/negociar/comprar/vender/jogar/correr) · <b>Mouse</b> câmera · <b>Esc</b> soltar o mouse · <b>M</b> música · <b>1–4</b> reações";
       this.root.append(help);
     }
     container.appendChild(this.root);

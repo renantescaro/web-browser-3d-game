@@ -821,3 +821,220 @@ body {
 .chopping-pips {
   letter-spacing: 4px;
 }
+
+/* ---------- Kartódromo ---------- */
+.kart-panel {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  width: min(380px, calc(100% - 24px));
+  padding: 10px 14px 12px;
+  border-radius: 14px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  text-align: center;
+  pointer-events: auto;
+}
+
+.kart-panel[hidden],
+.kart-countdown[hidden],
+.kart-speedo[hidden],
+.touch-kart[hidden] {
+  display: none;
+}
+
+.kart-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.kart-status {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.kart-panel[data-phase="results"] .kart-status {
+  color: #f6d743;
+}
+
+.kart-standings {
+  margin: 6px auto 0;
+  padding: 0 0 0 22px;
+  max-width: 300px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.kart-standings li {
+  padding: 1px 0;
+}
+
+.kart-standings li::marker {
+  font-weight: 700;
+}
+
+.kart-standings-me {
+  font-weight: 700;
+  color: #f6d743;
+}
+
+.kart-standings-name::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--racer-color, #fff);
+}
+
+.kart-standings-info {
+  float: right;
+  opacity: 0.85;
+}
+
+.kart-help {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.kart-exit {
+  margin-top: 8px;
+  padding: 5px 14px;
+  border: 1px solid rgb(255 255 255 / 0.6);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.12);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.kart-countdown {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 7;
+  color: #fff;
+  font-size: 96px;
+  font-weight: 900;
+  font-style: italic;
+  text-shadow: 0 4px 18px rgb(0 0 0 / 0.6), 0 0 2px #000;
+  pointer-events: none;
+}
+
+.kart-speedo {
+  position: absolute;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(70px + env(safe-area-inset-bottom));
+  z-index: 6;
+  width: 150px;
+  padding: 4px 6px 6px;
+  border-radius: 16px 16px 12px 12px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  pointer-events: none;
+}
+
+/* No celular os pedais ocupam os cantos de baixo: o velocímetro vai para o canto de cima. */
+.kart-speedo--touch {
+  top: calc(12px + env(safe-area-inset-top));
+  left: calc(12px + env(safe-area-inset-left));
+  right: auto;
+  bottom: auto;
+  width: 120px;
+}
+
+.kart-speedo svg {
+  display: block;
+  width: 100%;
+}
+
+.kart-speedo-arc {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.35);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.kart-speedo-marks line {
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.kart-speedo-marks text {
+  fill: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.kart-speedo-needle {
+  stroke: #ff4d4d;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.kart-speedo-hub {
+  fill: #ff4d4d;
+}
+
+.kart-speed-value {
+  margin-top: -22px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.kart-speed-value small {
+  margin-left: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+/* Pedais e setas do kart no celular. */
+.touch-kart-left,
+.touch-kart-right {
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  width: 76px;
+  height: 76px;
+  font-size: 26px;
+}
+
+.touch-kart-left {
+  left: calc(20px + env(safe-area-inset-left));
+}
+
+.touch-kart-right {
+  left: calc(110px + env(safe-area-inset-left));
+}
+
+.touch-kart-brake,
+.touch-kart-accel {
+  width: 84px;
+  height: 84px;
+  font-size: 14px;
+}
+
+.touch-kart-accel {
+  right: calc(28px + env(safe-area-inset-right));
+  bottom: calc(140px + env(safe-area-inset-bottom));
+  background: rgb(46 160 67 / 0.55);
+}
+
+.touch-kart-brake {
+  right: calc(124px + env(safe-area-inset-right));
+  bottom: calc(40px + env(safe-area-inset-bottom));
+  background: rgb(214 40 40 / 0.55);
+}
+
+.touch-btn.touch-btn--held {
+  background: rgb(255 255 255 / 0.45);
+}

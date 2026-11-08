@@ -8,6 +8,8 @@ import { SERVER_PORT, SQUARE_RADIUS, SQUARE_TREE_CLEARANCE, TICK_RATE } from "@j
 import { FISH_EATING_ANIMALS, type ClientToServerEvents, type ReactionId, type ServerToClientEvents } from "@jogo/shared/protocol";
 import { Room } from "./Room.js";
 import { generateAnimals } from "./Animals.js";
+import { KartRace } from "./KartRace.js";
+import { KartTrack } from "./KartTrack.js";
 import { ClothingShop } from "./ClothingShop.js";
 import { Forest } from "./Forest.js";
 import { LumberMill } from "./LumberMill.js";
@@ -17,7 +19,7 @@ import { ShootingGallery, type ShootingUpdate } from "./ShootingGallery.js";
 import { generateSquare } from "./Square.js";
 import { ToolShop } from "./ToolShop.js";
 import { generateTrees } from "./Trees.js";
-import { parseBuyOutfit, parseBuyTool, parseChopTree, parseSellWood, parseFeedAnimal, parseJoin, parseShootingShot, parseState, parseTrade, RateLimiter } from "./validation.js";
+import { parseBuyOutfit, parseBuyTool, parseChopTree, parseKartBump, parseSellWood, parseFeedAnimal, parseJoin, parseShootingShot, parseState, parseTrade, RateLimiter } from "./validation.js";
 
 const port = Number(process.env.PORT) || SERVER_PORT;
 const clientDist = normalize(join(dirname(fileURLToPath(import.meta.url)), "../../client/dist"));
@@ -70,7 +72,14 @@ const lumberMill = new LumberMill(
   [merchant.position, shootingBooth.position, clothingShop.position, toolShop.position],
   room,
 );
+// A pista contorna a praça e todas as barracas; a do Vitinho fica do lado de fora dela.
+const kartTrack = new KartTrack(square);
+const kartRace = new KartRace(kartTrack, room, {
+  broadcast: (msg) => io.to("game").emit("kartRace", msg),
+  money: (id, amount) => io.to(id).emit("money", { amount }),
+});
 const trees = generateTrees([
+  ...kartTrack.clearAreas(),
   { x: square.position.x, z: square.position.z, radius: SQUARE_RADIUS + SQUARE_TREE_CLEARANCE },
   { x: merchant.position.x, z: merchant.position.z, radius: MERCHANT_CLEAR_RADIUS },
   shootingBooth.clearArea(),
@@ -103,6 +112,8 @@ io.on("connection", (socket) => {
   const toolLimiter = new RateLimiter(4, 4);
   const chopLimiter = new RateLimiter(2, 3);
   const woodLimiter = new RateLimiter(4, 4);
+  const kartLimiter = new RateLimiter(4, 6);
+  const bumpLimiter = new RateLimiter(10, 10);
 
   /** Manda ao jogador o estado do Tiro ao Alvo (e o dinheiro, se mudou); no fim, avisa todos. */
   const sendShooting = ({ state, money }: ShootingUpdate): void => {
@@ -135,6 +146,8 @@ io.on("connection", (socket) => {
       clothingShop: clothingShop.toData(),
       toolShop: toolShop.toData(),
       lumberMill: lumberMill.toData(),
+      kartTrack: kartTrack.toData(),
+      kartRace: kartRace.message(),
     });
     socket.to("game").emit("playerJoined", { player: result.player });
     io.emit("lobby", lobbyMessage());
@@ -245,7 +258,26 @@ io.on("connection", (socket) => {
     io.to("game").emit("woodSold", { playerId: socket.id, amount: msg.amount });
   });
 
+  socket.on("kartJoin", () => {
+    if (!room.has(socket.id) || !kartLimiter.allow()) return;
+    const money = kartRace.join(socket.id);
+    if (money !== null) socket.emit("money", { amount: money });
+  });
+
+  socket.on("kartLeave", () => {
+    if (!room.has(socket.id) || !kartLimiter.allow()) return;
+    kartRace.leave(socket.id);
+  });
+
+  socket.on("kartBump", (raw: unknown) => {
+    if (!room.has(socket.id) || !bumpLimiter.allow()) return;
+    const msg = parseKartBump(raw);
+    const hit = msg && kartRace.bump(socket.id, msg.targetId);
+    if (hit) io.to("game").emit("hit", hit);
+  });
+
   socket.on("disconnect", () => {
+    kartRace.leave(socket.id);
     shootingGallery.stop(socket.id);
     clothingShop.forget(socket.id);
     toolShop.forget(socket.id);
@@ -264,6 +296,7 @@ setInterval(() => {
   for (const agent of animals) {
     agent.update(TICK_DT, agent.followingId ? room.positionOf(agent.followingId) : null);
   }
+  kartRace.update();
   if (room.playerCount === 0) return;
   io.to("game").emit("snapshot", {
     players: room.snapshots(),

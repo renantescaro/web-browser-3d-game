@@ -16,6 +16,8 @@ const TORSO_Y = 1.2;
 /** Gravata-borboleta logo abaixo do queixo, encostada no topo arredondado do tronco. */
 const BOW_TIE = { y: 1.43, z: 0.2 };
 const BOATER_BAND_COLOR = 0x1d1d1d;
+/** Pele padrão (igual à do `Character`), para o queixo de quem não define a própria. */
+const DEFAULT_SKIN = 0xe0b48f;
 
 /** Boné: copa arredondada e aba para a frente. Também é vendido pela Deendi. */
 export function buildCap(kit: AccessoryKit, mat: THREE.Material, head: THREE.Object3D): void {
@@ -81,6 +83,18 @@ export function buildAccessories(
       half.position.set(side * 0.035, BOW_TIE.y, BOW_TIE.z - 0.01);
     }
     kit.mesh(new THREE.SphereGeometry(0.018, 8, 6), mat, body).position.set(0, BOW_TIE.y, BOW_TIE.z);
+  }
+
+  if (appearance.bigChin) {
+    // Queixão projetado para a frente, com uma covinha no meio.
+    const skin = kit.material(appearance.skinColor ?? DEFAULT_SKIN);
+    const chin = kit.mesh(new THREE.SphereGeometry(0.1, 18, 12), skin, head);
+    chin.scale.set(1.3, 0.85, 1.2);
+    chin.position.set(0, -0.11, 0.1);
+    const dimple = kit.mesh(new THREE.BoxGeometry(0.008, 0.05, 0.01), kit.material(0x9c6b4e), head);
+    dimple.position.set(0, -0.115, 0.218);
+    const smile = kit.mesh(new THREE.BoxGeometry(0.08, 0.012, 0.01), kit.material(0x7a3b2e), head);
+    smile.position.set(0, -0.045, 0.158);
   }
 
   if (appearance.mustacheColor) {

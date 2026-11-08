@@ -105,7 +105,8 @@ async function joinAs(browser: Browser, name: string, colorIndex: number): Promi
   await page.getByPlaceholder("Seu nome").fill(name);
   await page.locator(".color-swatch").nth(colorIndex).click();
   await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page.locator(".join-screen")).toBeHidden();
+  // Com várias abas desenhando na CPU (SwiftShader), o `welcome` pode demorar.
+  await expect(page.locator(".join-screen")).toBeHidden({ timeout: 20_000 });
   await page.waitForFunction(() => window.__jogo !== undefined);
   return page;
 }

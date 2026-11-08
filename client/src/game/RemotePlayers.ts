@@ -27,6 +27,12 @@ export class RemotePlayers {
     return this.players.get(id);
   }
 
+  /** Id do jogador dono deste colisor, ou null se não for de um jogador remoto. */
+  idOfCollider(handle: number): string | null {
+    for (const p of this.players.values()) if (p.colliderHandle === handle) return p.id;
+    return null;
+  }
+
   add(snapshot: PlayerSnapshot): void {
     if (snapshot.id === this.selfId || this.players.has(snapshot.id)) return;
     this.players.set(snapshot.id, new RemotePlayer(this.physics, this.scene, snapshot, performance.now()));
@@ -65,10 +71,11 @@ export class RemotePlayers {
   }
 
   /** Informações para os testes E2E. */
-  debugInfo(): { id: string; name: string; x: number; y: number; z: number; outfit: Outfit }[] {
+  debugInfo(): { id: string; name: string; x: number; y: number; z: number; anim: string; outfit: Outfit }[] {
     return [...this.players.values()].map((p) => ({
       id: p.id,
       name: p.name,
+      anim: p.currentAnim,
       x: p.position.x,
       y: p.position.y,
       z: p.position.z,

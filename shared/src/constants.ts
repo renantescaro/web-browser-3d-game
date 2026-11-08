@@ -147,9 +147,9 @@ export const REACTION_DURATION_MS = 2500;
 // --- Praça da Cidade ---
 /** Raio do piso de pedra da praça (m). */
 export const SQUARE_RADIUS = 11;
-/** Faixa de distância do centro do mapa até o centro da praça (m). */
+/** Faixa de distância do centro do mapa até o centro da praça (m). O máximo deixa a pista de kart caber no mapa. */
 export const SQUARE_MIN_DISTANCE = 30;
-export const SQUARE_MAX_DISTANCE = 45;
+export const SQUARE_MAX_DISTANCE = 40;
 /** Folga extra ao redor da praça onde não nascem árvores (m). */
 export const SQUARE_TREE_CLEARANCE = 3;
 export const SQUARE_SIGN_TEXT = "Praça da Cidade";
@@ -338,3 +338,72 @@ export const LUMBER_RANGE = 2.2;
 export const LUMBER_FACING_DEG = 100;
 /** Intervalo mínimo entre duas vendas de madeira, conferido no servidor (ms). */
 export const WOOD_SELL_COOLDOWN_MS = 300;
+
+// --- Kartódromo (pista em volta da praça; o Vitinho Queixada aluga os karts) ---
+export const KART_OWNER_NAME = "Vitinho Queixada";
+/** Aparência do Vitinho: macacão vermelho de piloto, boné preto, gravata amarela e o queixão. */
+export const KART_OWNER_APPEARANCE: CharacterAppearance = {
+  shirtColor: "#d62828",
+  pantsColor: "#a4161a",
+  skinColor: "#e0ac83",
+  hat: { style: "cap", color: "#161616" },
+  bowTieColor: "#f6d743",
+  bigChin: true,
+};
+export const KART_SIGN_TEXT = "Kartódromo";
+/** Quanto custa correr (reais). */
+export const KART_ENTRY_COST = 10;
+/** Prêmio do 1º lugar (reais); só vale com 2 ou mais pilotos na largada. */
+export const KART_PRIZE = 30;
+export const KART_LAPS = 5;
+/** Largura da pista (m): cabem dois karts lado a lado com folga. */
+export const KART_TRACK_WIDTH = 8;
+/** Altura das muretas de pneus (m): o kart não passa, mas a pé dá para pular. */
+export const KART_WALL_HEIGHT = 0.6;
+/** Distância (m) da borda de dentro da pista até onde o Vitinho fica (a barraca fica no meio da pista). */
+export const KART_STALL_GAP = 2.2;
+/** Onde fica a barraca, ao longo da reta principal: metros depois da linha de largada. */
+export const KART_STALL_ALONG = 14;
+/** Distância (m) do Vitinho até o centro do balcão, à frente dele. */
+export const KART_COUNTER_OFFSET = 0.9;
+/** Distância máxima (m) do jogador até o centro do balcão para se inscrever. */
+export const KART_JOIN_RANGE = 2.2;
+/** Abertura total (graus) do cone em que o jogador precisa estar olhando para o balcão. */
+export const KART_FACING_DEG = 100;
+/** Espera depois do primeiro piloto pagar, para outros entrarem (ms). */
+export const KART_LOBBY_MS = 15_000;
+/** Contagem regressiva antes da largada (ms). */
+export const KART_COUNTDOWN_MS = 3_000;
+/** Depois que o 1º chega, os outros têm este tempo para terminar (ms). */
+export const KART_FINISH_GRACE_MS = 30_000;
+/** Uma corrida sem terminar acaba sozinha depois disto (ms). */
+export const KART_MAX_RACE_MS = 300_000;
+/** Quanto tempo o resultado fica na tela antes de liberar a pista (ms). */
+export const KART_RESULTS_MS = 8_000;
+/** Grid de largada: distância entre as filas (m, ao longo da pista) e de cada kart até o meio da pista. */
+export const KART_GRID_ROW_SPACING = 3.4;
+export const KART_GRID_LANE_OFFSET = 1.9;
+/** Velocidade máxima do kart: 60 km/h. */
+export const KART_MAX_SPEED_KMH = 60;
+export const KART_MAX_SPEED = KART_MAX_SPEED_KMH / 3.6;
+/** Aceleração, freio e desaceleração sem pedal (m/s²). */
+export const KART_ACCEL = 6.5;
+export const KART_BRAKE = 16;
+export const KART_COAST = 2.5;
+/** Velocidade máxima de ré (m/s). */
+export const KART_REVERSE_SPEED = 4;
+/** Velocidade máxima de giro do volante (rad/s). */
+export const KART_TURN_RATE = 2.1;
+/** Raio da esfera de colisão do kart (m). */
+export const KART_RADIUS = 0.7;
+/** Abaixo desta velocidade (m/s) encostar em alguém não empurra. */
+export const KART_BUMP_MIN_SPEED = 3;
+/** Intervalo mínimo entre duas batidas do mesmo kart no mesmo alvo (ms). */
+export const KART_BUMP_COOLDOWN_MS = 600;
+/** Empurrão de uma batida a toda velocidade (m/s); diminui com a velocidade. */
+export const KART_BUMP_KNOCKBACK = 9;
+/** Câmera do kart: quão rápido ela volta para trás do kart (1/s) e a inclinação. */
+export const KART_CAMERA_FOLLOW = 3.5;
+export const KART_CAMERA_PITCH = 0.22;
+/** Intervalo entre os placares da corrida enviados a todos (ms). */
+export const KART_STATE_INTERVAL_MS = 250;

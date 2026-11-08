@@ -25,6 +25,8 @@ export class RemotePlayer {
   readonly character: Character;
   readonly position = new THREE.Vector3();
   private readonly body: RAPIER.RigidBody;
+  /** Cápsula a pé ou esfera no kart (troca junto com a animação). */
+  private collider: RAPIER.Collider;
   private readonly buffer: BufferedState[] = [];
   private rotationY: number;
   private anim: AnimState = "idle";
@@ -41,7 +43,7 @@ export class RemotePlayer {
     this.name = snapshot.name;
     this.character = new Character(snapshot.name, snapshot.color);
     scene.add(this.character.root);
-    this.body = physics.createCharacterBody(snapshot.position).body;
+    ({ body: this.body, collider: this.collider } = physics.createCharacterBody(snapshot.position));
     this.rotationY = snapshot.rotationY;
     this.position.set(snapshot.position.x, snapshot.position.y, snapshot.position.z);
     this.push(snapshot, now);
@@ -62,6 +64,16 @@ export class RemotePlayer {
       anim: snapshot.anim,
     });
     if (this.buffer.length > MAX_BUFFER) this.buffer.shift();
+  }
+
+  /** Animação atual (para os testes E2E). */
+  get currentAnim(): AnimState {
+    return this.anim;
+  }
+
+  /** Identificador do colisor no Rapier (para saber em quem o kart bateu). */
+  get colliderHandle(): number {
+    return this.collider.handle;
   }
 
   /** O que o jogador veste agora (para os testes E2E). */
@@ -108,6 +120,9 @@ export class RemotePlayer {
 
   private setAnim(anim: AnimState): void {
     if (anim === "punch" && this.anim !== "punch") this.character.playPunch();
+    if ((anim === "kart") !== (this.anim === "kart")) {
+      this.collider = this.physics.replaceCharacterShape(this.body, this.collider, anim === "kart" ? "kart" : "person");
+    }
     this.anim = anim;
   }
 

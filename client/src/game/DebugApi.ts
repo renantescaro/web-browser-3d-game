@@ -10,6 +10,7 @@ import type { ChoppingDebugInfo } from "./ChoppingController";
 import type { ClothingDebugInfo } from "./ClothingController";
 import type { FishingDebugInfo } from "./FishingController";
 import type { Interactions } from "./Interactions";
+import type { KartDebugInfo } from "./KartController";
 import type { LumberMillDebugInfo } from "./LumberMillController";
 import type { MerchantDebugInfo } from "./MerchantController";
 import type { RemotePlayers } from "./RemotePlayers";
@@ -23,7 +24,7 @@ import type { ToolShopDebugInfo } from "./ToolShopController";
 export interface DebugApi {
   selfId: () => string;
   local: () => { x: number; y: number; z: number; rotationY: number; anim: string };
-  remotes: () => { id: string; name: string; x: number; y: number; z: number; outfit: Outfit }[];
+  remotes: () => { id: string; name: string; x: number; y: number; z: number; anim: string; outfit: Outfit }[];
   /** Gira a câmera para olhar um ponto (assim "W" anda até ele). */
   lookAt: (x: number, z: number) => void;
   trees: () => { id: string; type: string; x: number; z: number; scale: number; chopped: boolean }[];
@@ -39,6 +40,8 @@ export interface DebugApi {
   tools: () => ToolShopDebugInfo | null;
   /** Madeireira do Brenno. */
   lumber: () => LumberMillDebugInfo | null;
+  /** Kartódromo do Vitinho e a corrida. */
+  kart: () => KartDebugInfo;
   /** O que o jogador carrega. */
   inventory: () => Inventory;
   /** Minigame de cortar árvore. */
@@ -87,6 +90,7 @@ export function createDebugApi(g: DebugSources): DebugApi {
     clothing: () => g.interactions.clothing.debugInfo(),
     tools: () => g.interactions.tools.debugInfo(),
     lumber: () => g.interactions.lumber.debugInfo(),
+    kart: () => g.interactions.kart.debugInfo(),
     inventory: () => ({ ...g.interactions.inventory.current }),
     chopping: () => g.interactions.chopping.debugInfo(),
     rejoin: (progress) => g.network.rejoin(progress),

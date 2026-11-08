@@ -198,6 +198,11 @@ export class Room {
     return this.changeItem(record, "fish", 1);
   }
 
+  /** Estado atual do jogador, ou null se ele saiu. */
+  playerOf(id: string): PlayerSnapshot | null {
+    return this.players.get(id)?.snapshot ?? null;
+  }
+
   /** Posição atual do jogador (usada pelos animais que o seguem), ou null se ele saiu. */
   positionOf(id: string): Vec3 | null {
     return this.players.get(id)?.snapshot.position ?? null;

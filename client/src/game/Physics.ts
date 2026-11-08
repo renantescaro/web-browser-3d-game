@@ -1,6 +1,6 @@
 // Wrapper do Rapier: mundo, chão, paredes invisíveis e corpos dos personagens.
 import RAPIER from "@dimforge/rapier3d-compat";
-import { PHYSICS_HZ, PLAYER_HEIGHT, PLAYER_RADIUS, WORLD_HALF } from "@jogo/shared/constants";
+import { KART_RADIUS, PHYSICS_HZ, PLAYER_HEIGHT, PLAYER_RADIUS, WORLD_HALF } from "@jogo/shared/constants";
 import type { Vec3 } from "@jogo/shared/protocol";
 
 /** Distância do centro da cápsula até os pés. */
@@ -8,6 +8,9 @@ export const CAPSULE_CENTER_Y = PLAYER_HEIGHT / 2;
 const CAPSULE_HALF_HEIGHT = PLAYER_HEIGHT / 2 - PLAYER_RADIUS;
 const WALL_HEIGHT = 20;
 const WALL_THICKNESS = 1;
+
+/** Forma do corpo de um personagem: cápsula a pé ou esfera no kart (com a base nos pés). */
+export type BodyShape = "person" | "kart";
 
 export interface CharacterBody {
   body: RAPIER.RigidBody;
@@ -59,8 +62,20 @@ export class Physics {
     const body = this.world.createRigidBody(
       RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(feet.x, feet.y + CAPSULE_CENTER_Y, feet.z),
     );
-    const collider = this.world.createCollider(RAPIER.ColliderDesc.capsule(CAPSULE_HALF_HEIGHT, PLAYER_RADIUS), body);
+    const collider = this.world.createCollider(this.shapeDesc("person"), body);
     return { body, collider };
+  }
+
+  /** Troca a forma do corpo (ao entrar ou sair do kart). Retorna o colisor novo. */
+  replaceCharacterShape(body: RAPIER.RigidBody, old: RAPIER.Collider, shape: BodyShape): RAPIER.Collider {
+    this.world.removeCollider(old, false);
+    return this.world.createCollider(this.shapeDesc(shape), body);
+  }
+
+  private shapeDesc(shape: BodyShape): RAPIER.ColliderDesc {
+    if (shape === "person") return RAPIER.ColliderDesc.capsule(CAPSULE_HALF_HEIGHT, PLAYER_RADIUS);
+    // O corpo fica em CAPSULE_CENTER_Y acima dos pés; a esfera desce até encostar no chão.
+    return RAPIER.ColliderDesc.ball(KART_RADIUS).setTranslation(0, KART_RADIUS - CAPSULE_CENTER_Y, 0);
   }
 
   createCharacterController(): RAPIER.KinematicCharacterController {

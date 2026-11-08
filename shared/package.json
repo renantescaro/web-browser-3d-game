@@ -10,7 +10,8 @@
     "./items": "./src/items.ts",
     "./outfits": "./src/outfits.ts",
     "./tools": "./src/tools.ts",
-    "./inventory": "./src/inventory.ts"
+    "./inventory": "./src/inventory.ts",
+    "./kart": "./src/kart.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

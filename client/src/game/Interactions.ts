@@ -14,6 +14,8 @@ import type { ClothingShopManager } from "./ClothingShopManager";
 import { FeedingController } from "./FeedingController";
 import { FishingController } from "./FishingController";
 import type { Input, Intents } from "./Input";
+import { KartController } from "./KartController";
+import type { KartTrackManager } from "./KartTrackManager";
 import { LumberMillController } from "./LumberMillController";
 import type { LumberMillManager } from "./LumberMillManager";
 import { MerchantController } from "./MerchantController";
@@ -46,7 +48,10 @@ export interface InteractionDeps {
   toolShop: ToolShopManager;
   trees: TreesManager;
   lumberMill: LumberMillManager;
+  kartTrack: KartTrackManager;
   selfId: () => string;
+  /** Id do jogador remoto dono de um colisor (batidas de kart). */
+  remoteIdOf: (handle: number) => string | null;
 }
 
 export class Interactions {
@@ -61,6 +66,7 @@ export class Interactions {
   readonly clothing: ClothingController;
   readonly tools: ToolShopController;
   readonly lumber: LumberMillController;
+  readonly kart: KartController;
   private readonly actions: ActionResolver;
 
   constructor(d: InteractionDeps) {
@@ -83,11 +89,24 @@ export class Interactions {
       d.network,
       balance,
     );
+    this.kart = new KartController({
+      container: d.container,
+      touchMode: d.touchMode,
+      local: d.local,
+      manager: d.kartTrack,
+      camera: d.camera,
+      network: d.network,
+      touch: d.touch,
+      money: balance,
+      selfId: d.selfId,
+      remoteIdOf: d.remoteIdOf,
+    });
     const feeding = new FeedingController(d.local, d.animals, d.network, () => inventory.count("fish"), d.selfId);
 
-    // Prioridade da Ação: Negociar, Comprar roupas, Comprar ferramentas, Vender madeira, Jogar, Dar
-    // peixe, Cortar árvore, Pescar e, se nada servir, Bater.
+    // Prioridade da Ação: Buzinar/Correr (kart), Negociar, Comprar roupas, Comprar ferramentas, Vender
+    // madeira, Jogar, Dar peixe, Cortar árvore, Pescar e, se nada servir, Bater.
     this.actions = new ActionResolver([
+      this.kart,
       this.merchant,
       this.clothing,
       this.tools,
@@ -123,6 +142,7 @@ export class Interactions {
     this.shooting.onNotice = notify;
     this.fishing.onNotice = notify;
     this.chopping.onNotice = notify;
+    this.kart.onNotice = notify;
   }
 
   /** Rótulo atual do botão de Ação. */
@@ -144,6 +164,7 @@ export class Interactions {
     this.tools.close();
     this.lumber.close();
     this.shooting.stop();
+    this.kart.reset(welcome.kartRace);
     this.merchant.setStock(welcome.merchant.stock);
     const self: PlayerSnapshot | undefined = welcome.players.find((p) => p.id === welcome.selfId);
     if (!self) return;
@@ -161,6 +182,7 @@ export class Interactions {
     this.fishing.update(dt, intents);
     this.chopping.update(dt, intents);
     this.shooting.update(dt, intents);
+    this.kart.update(intents);
     const used = intents.action && this.actions.handle();
     this.actions.update();
     return used;
@@ -174,5 +196,6 @@ export class Interactions {
     this.tools.dispose();
     this.lumber.dispose();
     this.shooting.dispose();
+    this.kart.dispose();
   }
 }

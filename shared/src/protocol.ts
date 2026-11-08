@@ -12,9 +12,9 @@ export interface Vec3 {
 
 /**
  * "fish" = parado pescando, com a vara na mão; "aim" = mirando com a espingarda de pressão;
- * "chop" = cortando uma árvore, com o machado erguido.
+ * "chop" = cortando uma árvore, com o machado erguido; "kart" = sentado num kart.
  */
-export const ANIM_STATES = ["idle", "walk", "run", "jump", "punch", "fish", "aim", "chop"] as const;
+export const ANIM_STATES = ["idle", "walk", "run", "jump", "punch", "fish", "aim", "chop", "kart"] as const;
 export type AnimState = (typeof ANIM_STATES)[number];
 
 export interface PlayerSnapshot {
@@ -127,6 +127,8 @@ export interface CharacterAppearance {
   vestColor?: string;
   /** Roupas e acessórios do catálogo (`outfits.ts`), os mesmos que os jogadores compram. */
   outfit?: Outfit;
+  /** Queixo grande (o do Vitinho Queixada). */
+  bigChin?: boolean;
 }
 
 /** Quanto de cada item o comerciante tem. */
@@ -201,6 +203,62 @@ export interface LumberMillData {
   woodPrice: number;
 }
 
+/**
+ * O kartódromo: a pista com retas e curvas em volta da praça (traçado em `kart.ts`) e a barraca do
+ * Vitinho, no meio dela, perto da largada.
+ */
+export interface KartTrackData {
+  /** Centro do traçado (o mesmo da praça). */
+  center: Vec3;
+  /** Giro do traçado em volta do centro (múltiplo de 90°, escolhido para caber no mapa). */
+  trackRotation: number;
+  /** Largura da pista (m). */
+  width: number;
+  laps: number;
+  ownerName: string;
+  appearance: CharacterAppearance;
+  /** Pés do Vitinho, atrás do balcão. */
+  position: Vec3;
+  /** Olha para o lado dos clientes (para o meio da pista, de costas para ela). */
+  rotationY: number;
+  /** Centro do balcão (y = 0). Para correr, o jogador fica perto dele. */
+  counter: Vec3;
+  signText: string;
+  entryCost: number;
+  prize: number;
+}
+
+/**
+ * "idle" = pista livre; "lobby" = esperando mais pilotos; "countdown" = 3, 2, 1;
+ * "racing" = valendo; "results" = mostrando o resultado.
+ */
+export type KartPhase = "idle" | "lobby" | "countdown" | "racing" | "results";
+
+export interface KartRacer {
+  id: string;
+  name: string;
+  color: string;
+  /** Posição no grid de largada (0 = pole). */
+  slot: number;
+  /** Volta atual (1 a `laps`). */
+  lap: number;
+  /** Colocação atual (1 = primeiro). */
+  place: number;
+  /** Tempo de prova (ms) de quem terminou, ou null. */
+  finishMs: number | null;
+}
+
+/** Estado da corrida, enviado a todos. */
+export interface KartRaceMessage {
+  phase: KartPhase;
+  /** Quanto falta (ms) para a fase acabar sozinha (largada, fim da corrida ou fim do resultado). */
+  msLeft: number;
+  racers: KartRacer[];
+  /** No resultado: quem ganhou e quanto levou (0 se correu sozinho). */
+  winnerId: string | null;
+  prize: number;
+}
+
 export type ReactionId = 0 | 1 | 2 | 3;
 
 export interface ReactionMessage {
@@ -272,6 +330,17 @@ export interface ChopTreeMessage {
   treeId: string;
 }
 
+/** Pagar a entrada e entrar na próxima corrida de kart. */
+export type KartJoinMessage = Record<string, never>;
+
+/** Sair do kart (desiste da corrida; a entrada não volta). */
+export type KartLeaveMessage = Record<string, never>;
+
+/** O kart do jogador bateu em `targetId`; o servidor confere e empurra o alvo (evento `hit`). */
+export interface KartBumpMessage {
+  targetId: string;
+}
+
 /** Vender `amount` madeiras ao Brenno. */
 export interface SellWoodMessage {
   amount: number;
@@ -294,6 +363,8 @@ export interface WelcomeMessage {
   clothingShop: ClothingShopData;
   toolShop: ToolShopData;
   lumberMill: LumberMillData;
+  kartTrack: KartTrackData;
+  kartRace: KartRaceMessage;
 }
 
 export interface JoinRejectedMessage {
@@ -412,6 +483,9 @@ export interface ClientToServerEvents {
   buyTool: (msg: BuyToolMessage) => void;
   chopTree: (msg: ChopTreeMessage) => void;
   sellWood: (msg: SellWoodMessage) => void;
+  kartJoin: (msg: KartJoinMessage) => void;
+  kartLeave: (msg: KartLeaveMessage) => void;
+  kartBump: (msg: KartBumpMessage) => void;
 }
 
 /** Eventos que o servidor envia (tipagem do Socket.IO). */
@@ -435,4 +509,5 @@ export interface ServerToClientEvents {
   outfit: (msg: OutfitMessage) => void;
   outfitSold: (msg: OutfitSoldMessage) => void;
   toolSold: (msg: ToolSoldMessage) => void;
+  kartRace: (msg: KartRaceMessage) => void;
 }

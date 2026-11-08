@@ -66,6 +66,21 @@ export class Network {
     if (this.session) this.session = { ...this.session, outfit: { ...outfit } };
   }
 
+  /** Paga a entrada e entra na próxima corrida de kart; o servidor responde com `money` e `kartRace`. */
+  kartJoin(): void {
+    if (this.socket.connected) this.socket.emit("kartJoin", {});
+  }
+
+  /** Desiste da corrida (desce do kart). */
+  kartLeave(): void {
+    if (this.socket.connected) this.socket.emit("kartLeave", {});
+  }
+
+  /** O kart bateu em `targetId`; o servidor confere e empurra o alvo. */
+  kartBump(targetId: string): void {
+    if (this.socket.connected) this.socket.emit("kartBump", { targetId });
+  }
+
   /** Vende madeira ao Brenno; o servidor confere e responde com `money` e `inventory`. */
   sellWood(amount: number): void {
     if (this.socket.connected) this.socket.emit("sellWood", { amount });

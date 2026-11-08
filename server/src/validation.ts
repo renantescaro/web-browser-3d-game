@@ -10,6 +10,7 @@ import {
   type BuyOutfitMessage,
   type BuyToolMessage,
   type ChopTreeMessage,
+  type KartBumpMessage,
   type SellWoodMessage,
   type FeedAnimalMessage,
   type ShootingShotMessage,
@@ -142,6 +143,12 @@ export function parseBuyTool(value: unknown): BuyToolMessage | null {
 export function parseChopTree(value: unknown): ChopTreeMessage | null {
   if (!isRecord(value) || typeof value.treeId !== "string" || value.treeId.length > 64) return null;
   return { treeId: value.treeId };
+}
+
+/** Valida o `kartBump`. A corrida, a distância e a velocidade são conferidas no `KartRace`. */
+export function parseKartBump(value: unknown): KartBumpMessage | null {
+  if (!isRecord(value) || typeof value.targetId !== "string" || value.targetId.length > 64) return null;
+  return { targetId: value.targetId };
 }
 
 /** Valida o `sellWood`: quantidade inteira e positiva. Se ele tem a madeira é conferido na madeireira. */

@@ -5,6 +5,7 @@ import type { Outfit } from "@jogo/shared/outfits";
 import type { AnimState, CharacterAppearance } from "@jogo/shared/protocol";
 import { buildAccessories } from "./CharacterAccessories";
 import { HeldItems } from "./HeldItems";
+import { KartModel } from "./kart/KartModel";
 import { NameTag } from "./NameTag";
 import { Wardrobe } from "./wearables/Wardrobe";
 
@@ -41,6 +42,11 @@ interface Pose {
 const AIM_POSE: Pose = { legL: 0.12, legR: -0.12, armL: -1.4, armR: -Math.PI / 2, spreadL: -0.75, spreadR: -0.35 };
 /** Cortando: os dois braços erguidos acima da cabeça, segurando o machado. */
 const CHOP_POSE: Pose = { legL: 0.2, legR: -0.2, armL: -2.6, armR: -2.7, spreadL: -0.3, spreadR: -0.25 };
+/** No kart: sentado, pernas esticadas para a frente e mãos no volante. */
+const KART_POSE: Pose = { legL: -1.45, legR: -1.45, armL: -1.05, armR: -1.05, spreadL: -0.2, spreadR: -0.2 };
+/** Quanto o corpo desce para sentar no banco e onde o kart fica (o banco embaixo do quadril). */
+const KART_SEAT_DROP = 0.52;
+const KART_SEAT_Z = 0.25;
 
 export class Character {
   /** Posicionado nos pés; rotation.y = direção do personagem. */
@@ -58,6 +64,9 @@ export class Character {
   private readonly geometries: THREE.BufferGeometry[] = [];
   private readonly nameTag: NameTag;
   private readonly wardrobe: Wardrobe;
+  /** Kart, criado na primeira vez que o personagem senta num (na cor da camisa). */
+  private kart: KartModel | null = null;
+  private readonly kartColor: string;
 
   private time = Math.random() * 10;
   private walkPhase = 0;
@@ -69,6 +78,7 @@ export class Character {
   constructor(name: string, appearance: CharacterAppearance | string) {
     const look = typeof appearance === "string" ? { shirtColor: appearance } : appearance;
     const color = look.shirtColor;
+    this.kartColor = color;
     const mainMat = this.material(color);
     const limbMat = this.material(new THREE.Color(color).multiplyScalar(0.72));
     const pantsMat = look.pantsColor ? this.material(look.pantsColor) : limbMat;
@@ -183,6 +193,7 @@ export class Character {
     const fishing = anim === "fish";
     const aiming = anim === "aim";
     const chopping = anim === "chop";
+    const driving = anim === "kart";
     const moving = !airborne && speed > 0.3;
 
     // Ciclo de passos: frequência proporcional à velocidade.
@@ -200,7 +211,9 @@ export class Character {
           ? AIM_POSE
           : chopping
             ? CHOP_POSE
-            : { legL: s, legR: -s, armL: -s * 0.8, armR: s * 0.8, spreadL: 0.06, spreadR: 0.06 };
+            : driving
+              ? KART_POSE
+              : { legL: s, legR: -s, armL: -s * 0.8, armR: s * 0.8, spreadL: 0.06, spreadR: 0.06 };
 
     this.leftLeg.rotation.x += (pose.legL - this.leftLeg.rotation.x) * k;
     this.rightLeg.rotation.x += (pose.legR - this.rightLeg.rotation.x) * k;
@@ -212,11 +225,24 @@ export class Character {
     // Respiração quando parado; leve "quique" ao correr.
     const breathe = moving || airborne ? 0 : Math.sin(this.time * 2.2) * 0.03;
     this.torso.scale.set(1 - breathe * 0.4, 1 + breathe, 1 - breathe * 0.4);
-    this.body.position.y = Math.abs(Math.sin(this.walkPhase)) * 0.06 * this.swing;
+    this.body.position.y = driving ? -KART_SEAT_DROP : Math.abs(Math.sin(this.walkPhase)) * 0.06 * this.swing;
+    this.updateKart(dt, driving, speed);
 
     this.updatePunch(dt);
     this.updateHit(dt);
     this.held.update(dt, anim, this.body.rotation.x);
+  }
+
+  /** Mostra o kart só quando o personagem está nele, com as rodas girando. */
+  private updateKart(dt: number, driving: boolean, speed: number): void {
+    if (driving && !this.kart) {
+      this.kart = new KartModel(this.kartColor);
+      this.kart.root.position.z = KART_SEAT_Z;
+      this.root.add(this.kart.root);
+    }
+    if (!this.kart) return;
+    this.kart.root.visible = driving;
+    if (driving) this.kart.update(dt, speed);
   }
 
   private updatePunch(dt: number): void {
@@ -260,6 +286,7 @@ export class Character {
     this.nameTag.dispose();
     this.wardrobe.dispose();
     this.held.dispose();
+    this.kart?.dispose();
     for (const g of this.geometries) g.dispose();
     for (const m of this.materials) m.dispose();
   }

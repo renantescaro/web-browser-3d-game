@@ -1,8 +1,9 @@
 // O cenário que o servidor manda no `welcome`: árvores, praça, comerciante, Tiro ao Alvo,
-// loja de roupas, loja de ferramentas e madeireira. Monta tudo de uma vez e recarrega ao reconectar.
+// loja de roupas, loja de ferramentas, madeireira e kartódromo. Monta tudo de uma vez e recarrega ao reconectar.
 import type * as THREE from "three";
 import type { WelcomeMessage } from "@jogo/shared/protocol";
 import { ClothingShopManager } from "./ClothingShopManager";
+import { KartTrackManager } from "./KartTrackManager";
 import { LumberMillManager } from "./LumberMillManager";
 import { MerchantManager } from "./MerchantManager";
 import type { Physics } from "./Physics";
@@ -19,6 +20,7 @@ export class Scenery {
   readonly clothingShop: ClothingShopManager;
   readonly toolShop: ToolShopManager;
   readonly lumberMill: LumberMillManager;
+  readonly kartTrack: KartTrackManager;
 
   constructor(physics: Physics, scene: THREE.Scene) {
     this.trees = new TreesManager(physics, scene);
@@ -28,6 +30,7 @@ export class Scenery {
     this.clothingShop = new ClothingShopManager(physics, scene);
     this.toolShop = new ToolShopManager(physics, scene);
     this.lumberMill = new LumberMillManager(physics, scene);
+    this.kartTrack = new KartTrackManager(physics, scene);
   }
 
   /** Substitui o cenário atual (no reconectar, o servidor pode ter reiniciado). */
@@ -39,6 +42,7 @@ export class Scenery {
     this.clothingShop.load(welcome.clothingShop);
     this.toolShop.load(welcome.toolShop);
     this.lumberMill.load(welcome.lumberMill);
+    this.kartTrack.load(welcome.kartTrack);
   }
 
   /** Animações decorativas: árvores balançando, peixes, NPCs e patos. */
@@ -50,6 +54,7 @@ export class Scenery {
     this.clothingShop.update(dt);
     this.toolShop.update(dt);
     this.lumberMill.update(dt);
+    this.kartTrack.update(dt);
   }
 
   clear(): void {
@@ -60,5 +65,6 @@ export class Scenery {
     this.clothingShop.clear();
     this.toolShop.clear();
     this.lumberMill.clear();
+    this.kartTrack.clear();
   }
 }

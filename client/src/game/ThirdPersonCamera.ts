@@ -12,8 +12,10 @@ import {
   CAMERA_MIN_PITCH,
   CAMERA_PIVOT_HEIGHT,
   CAMERA_SENSITIVITY,
+  KART_CAMERA_FOLLOW,
+  KART_CAMERA_PITCH,
 } from "@jogo/shared/constants";
-import { clamp, forwardFromYaw } from "@jogo/shared/math";
+import { clamp, forwardFromYaw, wrapAngle } from "@jogo/shared/math";
 
 const MIN_CAMERA_Y = 0.3;
 /** Iterações do `aimAt` (o ponto mirado depende do ângulo por causa do ombro). */
@@ -37,6 +39,13 @@ export class ThirdPersonCamera {
   rotate(dx: number, dy: number): void {
     this.yaw -= dx * CAMERA_SENSITIVITY;
     this.pitch = clamp(this.pitch + dy * CAMERA_SENSITIVITY, CAMERA_MIN_PITCH, CAMERA_MAX_PITCH);
+  }
+
+  /** No kart: a câmera volta sozinha para trás dele (o mouse ainda olha em volta por um instante). */
+  chase(heading: number, dt: number): void {
+    const k = 1 - Math.exp(-KART_CAMERA_FOLLOW * dt);
+    this.yaw += wrapAngle(heading - this.yaw) * k;
+    this.pitch += (KART_CAMERA_PITCH - this.pitch) * k;
   }
 
   /** Converte o input (relativo à câmera) numa direção no mundo, com comprimento ≤ 1. */

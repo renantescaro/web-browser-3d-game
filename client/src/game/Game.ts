@@ -7,6 +7,7 @@ import type {
   HitMessage,
   JoinMessage,
   JoinRejectReason,
+  KartRaceMessage,
   LobbyMessage,
   MerchantStockMessage,
   MoneyMessage,
@@ -118,7 +119,9 @@ export class Game {
       toolShop: this.scenery.toolShop,
       trees: this.scenery.trees,
       lumberMill: this.scenery.lumberMill,
+      kartTrack: this.scenery.kartTrack,
       selfId: () => this.selfId,
+      remoteIdOf: (handle) => this.remotes.idOfCollider(handle),
     });
     this.interactions.reset(welcome);
     this.input.onPointerLockChange = (locked) => this.hud.setPointerLocked(locked);
@@ -165,6 +168,7 @@ export class Game {
     listen("outfit", this.onOutfit);
     listen("outfitSold", this.onOutfitSold);
     listen("toolSold", this.onToolSold);
+    listen("kartRace", this.onKartRace);
     listen("disconnect", this.onDisconnect);
   }
 
@@ -203,6 +207,7 @@ export class Game {
   private readonly onOutfit = ({ outfit }: OutfitMessage): void => this.interactions.clothing.setOutfit(outfit);
   private readonly onOutfitSold = (): void => this.scenery.clothingShop.playSale();
   private readonly onToolSold = (): void => this.scenery.toolShop.playSale();
+  private readonly onKartRace = (msg: KartRaceMessage): void => this.interactions.kart.setRace(msg);
   private readonly onLobby = (msg: LobbyMessage): void => this.hud.setOnline(msg.playerCount);
   private readonly onDisconnect = (): void => this.hud.setConnected(false);
 
@@ -230,6 +235,8 @@ export class Game {
     const actionUsed = this.interactions.update(dt, intents);
     if (intents.action && !actionUsed && this.local.tryPunch(time)) this.network.punch();
     this.camera.rotate(intents.lookDX, intents.lookDY);
+    // No kart a câmera volta sozinha para trás dele; W/S e A/D já viraram pedais e volante.
+    if (this.local.driving) this.camera.chase(this.local.rotationY, dt);
     const busy = this.interactions.busy;
     if (busy) this.moveDir.set(0, 0, 0);
     else this.camera.toWorldDirection(intents.moveX, intents.moveZ, this.moveDir);
