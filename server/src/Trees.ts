@@ -6,6 +6,7 @@ import {
   TREE_MIN_SCALE,
   TREE_MIN_SPACING,
   TREE_SPAWN_CLEAR_RADIUS,
+  TREE_VARIANTS,
   WORLD_HALF,
 } from "@jogo/shared/constants";
 import { TREE_TYPES, type TreeData } from "@jogo/shared/protocol";
@@ -46,6 +47,7 @@ export function generateTrees(blocked: BlockedArea[] = []): TreeData[] {
     trees.push({
       id: `tree-${i}`,
       type: TREE_TYPES[Math.floor(Math.random() * TREE_TYPES.length)]!,
+      variant: Math.floor(Math.random() * TREE_VARIANTS),
       position: { x: spot.x, y: 0, z: spot.z },
       rotationY: rand(0, Math.PI * 2),
       scale: rand(TREE_MIN_SCALE, TREE_MAX_SCALE),

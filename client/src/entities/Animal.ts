@@ -1,63 +1,85 @@
 import * as THREE from "three";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { REACTION_DURATION_MS } from "@jogo/shared/constants";
+import type { AnimalType } from "@jogo/shared/protocol";
+import { AnimalModels } from "./AnimalModels";
 
 /** Distância (m) do coração acima do ponto mais alto do animal. */
 const HEART_GAP = 0.3;
+/** Rapidez (1/s) da troca entre as animações parado ↔ andando. */
+const BLEND_RATE = 6;
+/** Velocidade (m/s) em que a animação de andar toca no ritmo original. */
+const WALK_CLIP_SPEED = 2;
 
-/** Classe base para todos os animais: geometrias, materiais, body-bob e dispose. */
-export abstract class Animal {
+/**
+ * Tinge cada material do modelo pelo papel (nome dado na conversão), a partir da cor do servidor.
+ * Papel sem regra (ex.: `pink`, o focinho do gato) mantém a cor do arquivo.
+ */
+const TINTS: Record<string, (base: THREE.Color) => THREE.Color> = {
+  main: (base) => base,
+  light: (base) => base.clone().lerp(new THREE.Color(0xffffff), 0.7),
+  dark: (base) => base.clone().multiplyScalar(0.3),
+};
+
+/** Animal (cachorro, gato ou cavalo): modelo animado por esqueleto, coração e dispose. */
+export class Animal {
   readonly root = new THREE.Group();
-  /** Grupo interno: todos os meshes ficam aqui para o body-bob funcionar. */
-  protected readonly body = new THREE.Group();
-  protected readonly materials: THREE.MeshStandardMaterial[] = [];
-  protected readonly geometries: THREE.BufferGeometry[] = [];
-
-  private walkPhase = 0;
+  private readonly materials: THREE.Material[] = [];
+  private readonly mixer: THREE.AnimationMixer;
+  private readonly idle: THREE.AnimationAction | null;
+  private readonly walk: THREE.AnimationAction | null;
+  private walkWeight = 0;
   private heart: { label: CSS2DObject; bubble: HTMLDivElement } | null = null;
   private heartTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(protected readonly color: string) {
-    this.root.add(this.body);
-    this.build();
-  }
+  constructor(type: AnimalType, color: string) {
+    const { object, clips } = AnimalModels.instantiate(type);
+    const base = new THREE.Color(color);
+    object.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+      const tint = (m: THREE.Material): THREE.Material => {
+        const copy = m.clone();
+        const rule = TINTS[m.name];
+        if (rule && copy instanceof THREE.MeshStandardMaterial) copy.color.copy(rule(base));
+        this.materials.push(copy);
+        return copy;
+      };
+      obj.material = Array.isArray(obj.material) ? obj.material.map(tint) : tint(obj.material);
+    });
+    this.root.add(object);
 
-  /** Constrói o modelo 3D. Chamado no constructor — subclasses implementam. */
-  protected abstract build(): void;
-
-  protected mat(color: THREE.ColorRepresentation): THREE.MeshStandardMaterial {
-    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
-    this.materials.push(m);
-    return m;
-  }
-
-  /** Cria um mesh, registra a geometria (sem duplicatas) e o adiciona ao pai. */
-  protected mesh(
-    geo: THREE.BufferGeometry,
-    mat: THREE.MeshStandardMaterial,
-    parent: THREE.Object3D = this.body,
-  ): THREE.Mesh {
-    if (!this.geometries.includes(geo)) this.geometries.push(geo);
-    const m = new THREE.Mesh(geo, mat);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    parent.add(m);
-    return m;
-  }
-
-  /** Versão mais escura da cor principal, usada em patas e detalhes. */
-  protected darker(factor = 0.55): THREE.Color {
-    return new THREE.Color(this.color).multiplyScalar(factor);
+    this.mixer = new THREE.AnimationMixer(object);
+    const action = (name: string): THREE.AnimationAction | null => {
+      const clip = THREE.AnimationClip.findByName(clips, name);
+      if (!clip) return null;
+      const a = this.mixer.clipAction(clip);
+      a.play();
+      // Começa em um ponto aleatório do ciclo para os animais não andarem sincronizados.
+      a.time = Math.random() * clip.duration;
+      return a;
+    };
+    this.idle = action("idle");
+    this.walk = action("walk");
+    this.applyWeights();
   }
 
   /**
-   * Atualiza animação de caminhada (body-bob vertical).
+   * Mistura as animações parado/andando e avança o esqueleto.
    * @param speed Velocidade aproximada em m/s; 0 = parado.
    */
   update(dt: number, speed: number): void {
-    this.walkPhase += dt * speed * 3.2;
-    const bob = Math.abs(Math.sin(this.walkPhase)) * 0.028 * Math.min(speed, 1);
-    this.body.position.y = bob;
+    const target = speed > 0 ? 1 : 0;
+    this.walkWeight += (target - this.walkWeight) * Math.min(1, dt * BLEND_RATE);
+    if (this.walk && speed > 0) this.walk.timeScale = speed / WALK_CLIP_SPEED;
+    this.applyWeights();
+    this.mixer.update(dt);
+  }
+
+  private applyWeights(): void {
+    this.idle?.setEffectiveWeight(1 - this.walkWeight);
+    this.walk?.setEffectiveWeight(this.walkWeight);
   }
 
   /** Coração que surge acima do animal (ganhou peixe). Usa a mesma animação das reações. */
@@ -82,7 +104,9 @@ export abstract class Animal {
     bubble.textContent = "❤️";
     wrapper.appendChild(bubble);
     const label = new CSS2DObject(wrapper);
-    label.position.y = new THREE.Box3().setFromObject(this.body).max.y + HEART_GAP;
+    // Medido em coordenadas locais (o root pode estar girado ou longe da origem).
+    const top = new THREE.Box3().setFromObject(this.root).max.y - this.root.position.y;
+    label.position.y = top + HEART_GAP;
     this.root.add(label);
     this.heart = { label, bubble };
     return this.heart;
@@ -94,8 +118,10 @@ export abstract class Animal {
       this.heart.label.removeFromParent();
       this.heart.label.element.remove();
     }
+    this.mixer.stopAllAction();
+    this.mixer.uncacheRoot(this.mixer.getRoot());
     this.root.removeFromParent();
-    for (const g of this.geometries) g.dispose();
+    // As geometrias são do modelo compartilhado (AnimalModels) e vivem enquanto a página viver.
     for (const m of this.materials) m.dispose();
   }
 }

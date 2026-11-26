@@ -1,20 +1,28 @@
-import { Model } from "../Model";
+import * as THREE from "three";
+import type { TreeType } from "@jogo/shared/protocol";
+import { TreeModels } from "./TreeModels";
 
 /**
- * Classe base das árvores. Cada tipo monta o modelo em tamanho base (escala 1);
- * a escala sorteada pelo servidor é aplicada no `root`.
+ * Árvore em pé: cópia de um modelo do `TreeModels` (geometria e materiais compartilhados).
+ * A escala sorteada pelo servidor é aplicada no `root`.
  */
-export abstract class Tree extends Model {
+export class Tree {
+  readonly root = new THREE.Group();
   /** Raio do tronco em escala 1; usado no colisor. */
-  abstract readonly trunkRadius: number;
+  readonly trunkRadius: number;
   /** Altura total em escala 1; usada no colisor. */
-  abstract readonly height: number;
+  readonly height: number;
 
-  constructor(scale: number) {
-    super();
+  constructor(type: TreeType, variant: number, scale: number) {
+    const template = TreeModels.tree(type, variant);
+    this.trunkRadius = template.trunkRadius;
+    this.height = template.height;
+    this.root.add(template.object.clone());
     this.root.scale.setScalar(scale);
   }
 
-  /** Monta o modelo. Chamado pela fábrica logo após o construtor. */
-  abstract build(): void;
+  /** Só tira da cena: os recursos são do modelo compartilhado. */
+  dispose(): void {
+    this.root.removeFromParent();
+  }
 }

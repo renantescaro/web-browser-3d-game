@@ -3,17 +3,9 @@ import type * as THREE from "three";
 import { CHOP_FACING_DEG, CHOP_RANGE, STUMP_HEIGHT } from "@jogo/shared/constants";
 import { distanceXZ, isFacingPoint } from "@jogo/shared/math";
 import type { TreeData, TreeType } from "@jogo/shared/protocol";
-import { Oak } from "../entities/trees/Oak";
-import { Pine } from "../entities/trees/Pine";
 import { Stump } from "../entities/trees/Stump";
-import type { Tree } from "../entities/trees/Tree";
+import { Tree } from "../entities/trees/Tree";
 import type { Physics } from "./Physics";
-
-/** Fábrica por tipo: para uma árvore nova, crie a classe e registre aqui. */
-const TREE_FACTORIES: Record<TreeType, (scale: number) => Tree> = {
-  oak: (scale) => new Oak(scale),
-  pine: (scale) => new Pine(scale),
-};
 
 /** Balanço da árvore a cada golpe de machado: duração (s), amplitude (rad) e frequência (rad/s). */
 const SHAKE = { duration: 0.35, amplitude: 0.035, frequency: 45 } as const;
@@ -43,7 +35,7 @@ export class TreesManager {
   }
 
   private build(data: TreeData): TreeEntry {
-    const tree = TREE_FACTORIES[data.type](data.scale);
+    const tree = new Tree(data.type, data.variant, data.scale);
     const radius = tree.trunkRadius;
     let model: Tree | Stump = tree;
     let height = tree.height;
@@ -51,8 +43,6 @@ export class TreesManager {
       tree.dispose();
       model = new Stump(radius, data.scale);
       height = STUMP_HEIGHT;
-    } else {
-      tree.build();
     }
     model.root.position.set(data.position.x, 0, data.position.z);
     model.root.rotation.y = data.rotationY;

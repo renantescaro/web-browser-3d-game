@@ -184,3 +184,9 @@ Garanta que a plataforma suporte **WebSockets** (as citadas suportam).
 
 - **Rode só uma instância.** O estado da sala fica na memória do processo; duas instâncias seriam duas salas separadas, e um balanceador de carga dividiria os jogadores entre elas.
 - **Reiniciar o servidor esvazia a sala.** Os jogadores conectados reconectam sozinhos e voltam com o mesmo nome e cor (se a cor ainda estiver livre).
+
+## Créditos
+
+Modelos do cachorro, do gato e do cavalo: [Quaternius](https://quaternius.com) (CC0), "Animal Pack Vol.2" e "Farm Animals Animated", convertidos para GLB por `scripts/convert-animals.mjs`.
+
+Árvores e toco: [Quaternius](https://quaternius.com) (CC0), "Ultimate Nature Pack", convertidos para GLB por `scripts/convert-trees.mjs`.

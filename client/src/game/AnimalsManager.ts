@@ -2,10 +2,7 @@ import * as THREE from "three";
 import { FEED_FACING_DEG, FEED_RANGE } from "@jogo/shared/constants";
 import { FISH_EATING_ANIMALS, type AnimalData, type AnimalSnapshot, type AnimalType } from "@jogo/shared/protocol";
 import { distanceXZ, forwardFromYaw, wrapAngle } from "@jogo/shared/math";
-import type { Animal } from "../entities/Animal";
-import { Cat } from "../entities/Cat";
-import { Dog } from "../entities/Dog";
-import { Horse } from "../entities/Horse";
+import { Animal } from "../entities/Animal";
 
 interface AnimalEntry {
   animal: Animal;
@@ -31,7 +28,7 @@ export class AnimalsManager {
 
   load(list: AnimalData[]): void {
     for (const data of list) {
-      const animal = this.create(data);
+      const animal = new Animal(data.type, data.color);
       animal.root.position.set(data.position.x, 0, data.position.z);
       animal.root.rotation.y = data.rotationY;
       this.scene.add(animal.root);
@@ -100,14 +97,6 @@ export class AnimalsManager {
       // Velocidade visual aproximada: proporcional à distância ao alvo
       const dist = Math.hypot(dx, dz);
       entry.animal.update(dt, dist > 0.05 ? 2.0 : 0);
-    }
-  }
-
-  private create(data: AnimalData): Animal {
-    switch (data.type) {
-      case "dog":   return new Dog(data.color);
-      case "cat":   return new Cat(data.color);
-      case "horse": return new Horse(data.color);
     }
   }
 
