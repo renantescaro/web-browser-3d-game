@@ -108,9 +108,11 @@ export const ANIMAL_FOLLOW_MAX_SPEED = 8.5;
 // --- Árvores ---
 /** Quantas árvores o servidor gera ao iniciar. */
 export const TREE_COUNT = 20;
-/** Faixa da escala aleatória de cada árvore (1 = tamanho base, ~5 m de altura). */
+/** Faixa da escala aleatória de cada árvore (1 = tamanho do modelo, 4 a 8 m de altura). */
 export const TREE_MIN_SCALE = 0.8;
-export const TREE_MAX_SCALE = 1.6;
+export const TREE_MAX_SCALE = 1.3;
+/** Variações de modelo por tipo de árvore (`TreeData.variant` vai de 0 a TREE_VARIANTS - 1). */
+export const TREE_VARIANTS = 5;
 /** Distância mínima entre árvores (m). */
 export const TREE_MIN_SPACING = 8;
 /** Raio livre no centro do mapa, onde os jogadores nascem (m). */

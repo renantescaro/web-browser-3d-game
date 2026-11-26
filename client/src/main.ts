@@ -1,5 +1,7 @@
 // Bootstrap: tela de entrada → jogo.
 import "./style.css";
+import { AnimalModels } from "./entities/AnimalModels";
+import { TreeModels } from "./entities/trees/TreeModels";
 import { Game } from "./game/Game";
 import { Music } from "./game/Music";
 import { Physics } from "./game/Physics";
@@ -10,15 +12,15 @@ const app = document.getElementById("app");
 if (!app) throw new Error("Elemento #app não encontrado");
 const container = app;
 
-// Carrega o WASM do Rapier enquanto o jogador preenche o formulário.
-const physicsReady = Physics.init();
+// Carrega o WASM do Rapier e os modelos (animais e árvores) enquanto o jogador preenche o formulário.
+const assetsReady = Promise.all([Physics.init(), AnimalModels.load(), TreeModels.load()]);
 const network = new Network();
 // Criada já na tela de entrada para destravar o áudio no primeiro clique/tecla.
 const music = new Music();
 let game: Game | null = null;
 
 const joinScreen = new JoinScreen(container, network, (welcome, info) => {
-  physicsReady
+  assetsReady
     .then(() => {
       game = new Game(container, network, welcome, info, music);
       game.onKicked = (reason) => {
@@ -29,7 +31,7 @@ const joinScreen = new JoinScreen(container, network, (welcome, info) => {
       };
     })
     .catch((err: unknown) => {
-      console.error("Falha ao iniciar a física", err);
+      console.error("Falha ao carregar a física ou os modelos", err);
       network.setSession(null);
       joinScreen.show("Não foi possível iniciar o jogo neste navegador.");
     });

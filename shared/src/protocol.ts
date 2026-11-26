@@ -48,14 +48,19 @@ export interface AnimalData {
   rotationY: number;
 }
 
-/** Tipos de árvore. Para um tipo novo: adicione aqui e crie a classe em `client/src/entities/trees/`. */
-export const TREE_TYPES = ["oak", "pine"] as const;
+/**
+ * Tipos de árvore (modelos do Quaternius em `client/src/assets/trees/trees.glb`). Para um tipo
+ * novo: adicione aqui e em `scripts/convert-trees.mjs` e gere o GLB de novo.
+ */
+export const TREE_TYPES = ["oak", "pine", "birch"] as const;
 export type TreeType = (typeof TREE_TYPES)[number];
 
 /** Árvore estática do cenário, gerada pelo servidor ao iniciar. */
 export interface TreeData {
   id: string;
   type: TreeType;
+  /** Qual dos modelos do tipo, de 0 a `TREE_VARIANTS` - 1. */
+  variant: number;
   /** Posição da base do tronco (y = 0). */
   position: Vec3;
   rotationY: number;
